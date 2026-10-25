@@ -1,3 +1,6 @@
 .DS_Store
 .openai/*.tar.gz
 .openai/site-workflow-*
+
+.openai/portable-bundle.js
+scripts/__pycache__/

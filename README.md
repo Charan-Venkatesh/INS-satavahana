@@ -1,19 +1,18 @@
-# Actual assembled 3D Battery Agitation display
+# Corrected 3D Battery Agitation — online and offline
 
-The main view now loads `dist/assets/assembled-battery-agitation.glb`, exported from the actual Blender assembly. This replaces the earlier separately drawn web geometry. Battery, pressure-cover, valve, reducer, filter, gauge and pipe meshes are reused from the original rendered assets.
+The main view loads the actual assembled Blender model, not a separately drawn replacement. The yellow cap stays on each battery lid. The circuit safety positions use the user-supplied perforated circular part. The lid follows photo 31844, with two rows of six terminals, red/yellow/clear fittings and an existing air opening. Main pipes have been thickened to a 50 mm estimated display diameter; gauge lines and battery hoses remain smaller.
 
-`dist/assets/assembled-air-particles.json` contains positions sampled from the native Blender particle animation. Touch controls bind to exported component metadata, including the original hand reducer side handles. The camera stays fixed.
+## Online
+Open https://battery-agitation-touchscreen-charan.elatedrose129.chatgpt.site and sign in. Sharing remains owner-private. After the Controls panel says **Ready for offline use on this device**, the browser has cached the app, native 3D asset, images and code. You can install/add it to your home screen using the browser menu. Clearing browser/site storage removes that cached copy.
 
-The native Blender model and full-size top/isometric renders are in `../battery-pit-blender/assembled-circuit/`.
+## Downloaded offline copy
+Download dist/offline/Battery-Agitation-Offline.zip, extract it and open Battery-Agitation-Offline.html in a modern browser. The single HTML file embeds the complete model, air data, images, styles and bundled JavaScript. No server, network connection, Blender installation or sign-in is needed for this copy. Some file-preview apps do not execute HTML; use a browser or the installed online version.
 
-A fixed orthographic top-view 3D circuit for a 92-inch touch display. Start locally with `python3 -m http.server 4182 --directory dist`, then open http://localhost:4182. Use browser full screen on the display. No external fonts or CDN packages are required.
+## Devices and controls
+Desktop, tablet and phone layouts retain the fixed orthographic top view. On smaller screens, Controls opens an overlay without resizing or moving the circuit. Choose a part provides an alternative to small targets. All models and buttons use local assets with no CDN or external font dependency. If WebGL is unavailable, an embedded top-view render provides a static fallback; live 3D animation then remains unavailable.
 
-The main camera has no drag, pan, orbit, pinch or wheel zoom. Selecting a component changes only the fixed-width inspector. Only a shut-off cross, a hand reducer's side handwheel, gauge needle and illustrative air particles can move. Browser resize/fullscreen refits the same top view.
+## Native project
+The corrected Blender assembly, reusable component sources, render views and parameter file are in ../battery-pit-blender/assembled-circuit. Its .glb is exported to dist/assets/assembled-battery-agitation.glb. The side handles and air positions come from that native model. Camera movement is disabled in the display. Airflow and gauge behavior are illustrative, not CFD or measured plant operation. Actual pipe sizes, bank count and physical hose routing remain unverified.
 
-Both branches follow the supplied 1000156124.jpg diagram: shut-off, automatic reducer (square with V), hand reducer (square with X and outboard handwheel), diamond filter, upward-facing PG, cell manifold and safety branch. Setpoints are copied from the drawing. A distinct air fitting connects each representative battery to its manifold; air never attaches to the electrical terminals.
-
-The original project AirflowNetwork is reused unchanged in dist/airflow3d.js. The existing Blender pressure-cover geometry is exported to dist/assets/safety-cover.json and reused for the user's safety-valve display. The main view preserves the requested top symbols, rather than showing generic regulator bodies that obscure the drawing.
-
-Dimensions, battery-bank quantity, physical hose routing, and equivalence of the photographed battery pressure cover to the diagram's line safety valve remain unverified. One representative battery per branch is a visual assembly, not a measured bank. Particle movement, gauge changes and release-path preview illustrate the controls; no real plant or validated pressure solver is connected.
-
-Touch controls: inspect all parts and main header, open/close each shut-off, adjust each hand reducer within 0.130–0.160 in 0.005 steps, show the safety branch, pause air, toggle labels, reset and view the source drawing. All state resets when reloaded.
+## Build
+Run scripts/build-portable.py with --esbuild pointing to an official esbuild executable. It bundles the app, embeds every runtime asset into the offline file, packages the ZIP and generates a versioned service worker. The downloadable HTML is self-contained; users do not need build tools.

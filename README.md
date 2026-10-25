@@ -1,4 +1,10 @@
-# Battery Agitation touchscreen
+# Actual assembled 3D Battery Agitation display
+
+The main view now loads `dist/assets/assembled-battery-agitation.glb`, exported from the actual Blender assembly. This replaces the earlier separately drawn web geometry. Battery, pressure-cover, valve, reducer, filter, gauge and pipe meshes are reused from the original rendered assets.
+
+`dist/assets/assembled-air-particles.json` contains positions sampled from the native Blender particle animation. Touch controls bind to exported component metadata, including the original hand reducer side handles. The camera stays fixed.
+
+The native Blender model and full-size top/isometric renders are in `../battery-pit-blender/assembled-circuit/`.
 
 A fixed orthographic top-view 3D circuit for a 92-inch touch display. Start locally with `python3 -m http.server 4182 --directory dist`, then open http://localhost:4182. Use browser full screen on the display. No external fonts or CDN packages are required.
 

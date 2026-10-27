@@ -4,11 +4,11 @@ OFFLINE ON A COMPUTER
 Open Battery-Agitation-Offline.html in a modern browser. All 3D models, air positions, code, images and reference drawings are embedded. No server, internet connection, installation or sign-in is required for this downloaded file.
 
 PHONES AND TABLETS
-Open the private online page once while connected and sign in. Open Controls and wait for “Ready for offline use on this device”. You can then install/add it to the home screen using your browser's menu and reopen it without internet. Browser storage must remain available; clearing website data removes the offline cache.
+Open the public online page once while connected. No sign-in is required. Open Controls and wait for “Ready for offline use on this device”. You can then install/add it to the home screen using your browser's menu and reopen it without internet. Browser storage must remain available; clearing website data removes the offline cache.
 
 ONLINE
 https://battery-agitation-touchscreen-charan.elatedrose129.chatgpt.site
-The online page remains private and requires ChatGPT sign-in. No sharing permissions were changed.
+The online page is public and does not require a ChatGPT login.
 
 TOUCH CONTROLS
 The camera is fixed. Tap a part or use Controls → Choose a part. Adjustments move only the existing side handle, needle and illustrative air. Main pipe diameter is a visual estimate, not a measured engineering size.

@@ -85,7 +85,15 @@ const releasing={port:0,stbd:0},SAFETY_SET=.2;
 // the wheel eases to its target instead of jumping. Touching the valve toggles it.
 const WHEEL_SHUT=Math.PI/4,WHEEL_OPEN=-4*Math.PI,WHEEL_SPEED=3*Math.PI;   // shut rests as ×, open as + (≈2 turns apart); rad/s
 const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(w)w.userData.target=branches[side].open?WHEEL_OPEN:WHEEL_SHUT};
-function wheelUpdate(dt){for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w||w.userData.target==null)continue;
+// Auto reducer status colour: its square V cap glows green while air passes through it (Start + shut-off open)
+// and red when it is off; the colour fades between states and the green gently pulses while on.
+const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33');
+function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _]square[ _]symbol[ _]cap[ _]v/i.exec(n.name);if(!m||!n.isMesh)return;
+ n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);autoLamps[m[1].toLowerCase()]={mesh:n,mix:0}})}
+function lampUpdate(dt){const t=performance.now()/1000,c=new T.Color();for(const side in autoLamps){const l=autoLamps[side],on=flowing&&branches[side].open;
+ l.mix+=((on?1:0)-l.mix)*Math.min(1,dt*5);c.copy(LAMP_OFF).lerp(LAMP_ON,l.mix);l.mesh.material.color.copy(c);
+ if(l.mesh.material.emissive){l.mesh.material.emissive.copy(c);l.mesh.material.emissiveIntensity=.25+(on?.35*(.5+.5*Math.sin(t*4)):0)}}}
+function wheelUpdate(dt){lampUpdate(dt);for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w||w.userData.target==null)continue;
  const d=w.userData.target-w.rotation.y,step=WHEEL_SPEED*dt;w.rotation.y+=Math.abs(d)<=step?d:Math.sign(d)*step}}
 // Battery detail starts at this branch's PG reading, or the hand reducer setting when no air is flowing.
 const openBattery=side=>openBatteryDetail({side,pressure:pgValue(side)||(branches[side].hand?branches[side].value:AUTO_SET)});
@@ -165,7 +173,7 @@ if(webglAvailable)Promise.all([new GLTFLoader().loadAsync('assets/assembled-batt
  for(const node of handNodes){const side=node.userData.touch_handle;node.userData.nativeAxis='y';node.userData.restAngle=node.rotation.y;wheels[side]=node}
  for(const node of needleNodes){const side=node.userData.touch_needle,c=node.userData.touch_center,pivot=new T.Group();pivot.position.set(c[0],c[2],-c[1]);model.add(pivot);scene.updateMatrixWorld(true);pivot.attach(node);pivot.userData.nativeBaseline=-(.145/.4)*Math.PI*1.5+Math.PI*.75;needles[side]=pivot;const cv=document.createElement('canvas');cv.width=cv.height=512;dialFace(cv.getContext('2d'),512);const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=4;const face=new T.Mesh(new T.PlaneGeometry(.154,.154),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,toneMapped:false}));face.rotation.x=-Math.PI/2;face.position.set(c[0],c[2]+.0028,-c[1]);face.renderOrder=2;model.add(face)}
  model.traverse(n=>{if(/gauge.?number|dial.?tick/i.test(n.name))n.visible=false});
- scene.updateMatrixWorld(true);model3d=model;buildPlume();rerouteBatteryHoses(air);
+ scene.updateMatrixWorld(true);model3d=model;buildPlume();rerouteBatteryHoses(air);autoReducerLamps();
  classifyAir(air);nativeAirFrames=air;nativeAir=new T.InstancedMesh(new T.SphereGeometry(1,10,8),new T.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),air.length);nativeAir.frustumCulled=false;nativeAir.instanceMatrix.setUsage(T.DynamicDrawUsage);for(let i=0;i<air.length;i++)nativeAir.setColorAt(i,new T.Color(air[i].kind==='release'?'#00a4d6':'#1a98e0'));scene.add(nativeAir);nativeAirUpdate(0);ground.visible=false;actualModelReady=true;loading.remove();renderer.render(scene,camera);
 }).catch(error=>{loading.remove();const e=document.querySelector('#error');e.hidden=false;e.textContent='The assembled 3D model could not load. Please reload.';console.error(error)});
 

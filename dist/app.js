@@ -21,7 +21,7 @@ const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opa
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
 // Dark studio look for the circuit (as in the reference rendering): dark backdrop, light drawing labels.
-{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}';document.head.append(st)}
+{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}body.inspector-hidden #controls-toggle{display:block!important}';document.head.append(st)}
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
 // Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
 // 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
@@ -85,7 +85,7 @@ function details(){const el=document.querySelector('#detail');if(!selected){el.i
 }
 function select(id){selected=id;
  // On narrow screens the panel floats over the circuit: dock it left for STBD parts so the right side stays visible.
- const left=parts.get(id)?.side==='stbd',panel=document.querySelector('#inspector');panel.style.left=left?'12px':'';panel.style.right=left?'auto':'';document.querySelector('#component-select').value=id;document.body.classList.add('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded','true');hotspots.forEach(h=>{const active=h.el.dataset.part===id;h.el.classList.toggle('selected',active);h.el.setAttribute('aria-pressed',String(active))});details()}
+ const left=parts.get(id)?.side==='stbd',panel=document.querySelector('#inspector');panel.style.left=left?'12px':'';panel.style.right=left?'auto':'';document.querySelector('#component-select').value=id;document.body.classList.remove('inspector-hidden');document.body.classList.add('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded','true');hotspots.forEach(h=>{const active=h.el.dataset.part===id;h.el.classList.toggle('selected',active);h.el.setAttribute('aria-pressed',String(active))});details()}
 const releasing={port:0,stbd:0},SAFETY_SET=.2;
 // Shut-off handwheel: opening turns it two full turns anticlockwise (seen from above), closing turns it back;
 // the wheel eases to its target instead of jumping. Touching the valve toggles it.
@@ -115,9 +115,12 @@ document.querySelector('#air').onclick=()=>{flowing=!flowing;showRunState();if(f
 document.querySelector('#start').onclick=()=>document.querySelector('#air').click();
 showRunState();
 document.querySelector('#labels-toggle').onclick=()=>{labelVisible=!labelVisible;circuit.classList.toggle('hide-labels',!labelVisible);document.querySelector('#labels-toggle').textContent=labelVisible?'☷  Hide drawing labels':'☷  Show drawing labels';document.querySelector('#labels-toggle').setAttribute('aria-pressed',String(labelVisible))};
-document.querySelector('#controls-toggle').onclick=()=>{const open=document.body.classList.toggle('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded',String(open))};
-document.querySelector('#clear').onclick=()=>{document.body.classList.remove('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded','false');selected=null;document.querySelector('#component-select').value='';hotspots.forEach(h=>{h.el.classList.remove('selected');h.el.setAttribute('aria-pressed','false')});details()};
-document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,auto:true,hand:true,value:.145,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;showRunState();if(labelVisible)document.querySelector('#labels-toggle').click();document.querySelector('#clear').click()};
+document.querySelector('#controls-toggle').onclick=()=>{const hidden=document.body.classList.remove('inspector-hidden');const open=document.body.classList.toggle('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded',String(open))};
+function clearSelection(){document.body.classList.remove('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded','false');selected=null;document.querySelector('#component-select').value='';hotspots.forEach(h=>{h.el.classList.remove('selected');h.el.setAttribute('aria-pressed','false')});details()}
+// × hides the Component Inspector on every screen size (on wide screens the circuit takes its column);
+// Controls or touching a part brings it back.
+document.querySelector('#clear').onclick=()=>{clearSelection();document.body.classList.add('inspector-hidden')};
+document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,auto:true,hand:true,value:.145,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;showRunState();if(labelVisible)document.querySelector('#labels-toggle').click();clearSelection()};
 document.querySelector('#reference').onclick=()=>document.querySelector('#reference-dialog').showModal();document.querySelector('#close-reference').onclick=()=>document.querySelector('#reference-dialog').close();
 document.querySelector('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{document.querySelector('#fullscreen').textContent='Use browser full screen'}};document.addEventListener('fullscreenchange',()=>document.querySelector('#fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen');
 // No OrbitControls, drag handlers, zoom or camera animation. Resize only fits the same plan.
@@ -449,7 +452,7 @@ document.querySelector('#view-top').onclick=()=>setView('top');
 document.querySelector('#view-front').onclick=()=>setView('front');
 
 let last=performance.now();function animate(now){const dt=Math.min(.05,(now-last)/1000);last=now;updateFlow();wheelUpdate(dt);for(const battery of integratedBatteries)battery.update(dt);if(webglAvailable){if(actualModelReady)nativeAirUpdate(flowing?dt:0);else network.update(flowing?dt:0)}renderer.render(scene,camera);requestAnimationFrame(animate)}
-const chooser=document.querySelector('#component-select');for(const p of parts.values()){const option=document.createElement('option');option.value=p.id;option.textContent=p.title;chooser.append(option)}chooser.onchange=()=>{if(chooser.value)select(chooser.value);else document.querySelector('#clear').click()};
+const chooser=document.querySelector('#component-select');for(const p of parts.values()){const option=document.createElement('option');option.value=p.id;option.textContent=p.title;chooser.append(option)}chooser.onchange=()=>{if(chooser.value)select(chooser.value);else clearSelection()};
 details();layout();requestAnimationFrame(animate);
 // Read-only state for touch-display verification and integrations.
 window.batteryAgitation={getState:()=>({selected,flowing,viewMode,labels:labelVisible,branches:JSON.parse(JSON.stringify(branches)),camera:{position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),zoom:camera.zoom},parts:parts.size,pipes:pipes.length,actualBlenderModel:actualModelReady}),select,reset:()=>document.querySelector('#reset').click()};

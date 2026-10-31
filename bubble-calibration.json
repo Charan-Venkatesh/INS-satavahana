@@ -1,0 +1,12 @@
+{
+  "inlet_pressure_kgf_cm2": {"minimum": 0.13, "maximum": 0.16, "source": "user", "basis_gauge_or_absolute": null},
+  "air_flow_l_min_per_battery": null,
+  "flow_reference_pressure_temperature": null,
+  "liquid_depth_m": null,
+  "electrolyte_density_kg_m3": null,
+  "diffuser_hole_diameter_mm": null,
+  "diffuser_hole_count": null,
+  "surface_tension_n_m": null,
+  "bubble_rise_velocity_m_s": null,
+  "status": "Uncalibrated appearance only. Pressure does not establish flow, bubble diameter or rise velocity. No pressure-to-animation scaling is applied."
+}

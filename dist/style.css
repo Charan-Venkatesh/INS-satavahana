@@ -8,3 +8,7 @@
 .part-chooser{display:grid;gap:8px;margin-top:18px;font-size:11px;color:#6c8976;flex:0 0 auto}.part-chooser select{width:100%;min-height:50px;background:white;border:1px solid #c7d8c9;border-radius:8px;padding:0 12px;font:inherit;font-size:13px;color:#244c3b}.static-render{width:100%;height:100%;object-fit:contain;display:block}.static-mode .drawing-label{visibility:hidden}.system-controls>button:disabled{opacity:.5;cursor:default}@media(max-width:900px){.part-chooser{font-size:12px}.part-chooser select{min-height:54px;font-size:14px}}
 
 .release-key{background:#00a4d6}.legend{flex-wrap:wrap;row-gap:4px}
+
+.front-view #labels{visibility:hidden;pointer-events:none}.top-actions button[aria-pressed="true"]{background:#245b4a;color:white}.front-view .hint::after{content:' · Bubbles visible inside the batteries'}.top-actions{flex-wrap:wrap}@media(max-width:900px){header{height:auto;min-height:110px}.top-actions{justify-content:flex-end;max-width:58%}.top-actions button{min-height:38px}main{height:calc(100dvh - 150px)}}
+
+#start{background:#245b4a;color:white;min-width:100px;font-weight:700}

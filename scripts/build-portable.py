@@ -44,7 +44,7 @@ Interactive 3D requires a modern browser with WebGL. If unavailable, the supplie
 with zipfile.ZipFile(offline/'Battery-Agitation-Offline.zip','w',zipfile.ZIP_DEFLATED) as z:
  z.write(output,output.name);z.writestr('START-HERE.txt',readme)
 # Build a versioned cache list. Download bundles are deliberately not duplicated in browser storage.
-core=['./'+bundle_name,'./','./index.html','./style.css','./app.js','./app.bundle.js','./offline-support.js','./airflow3d.js','./manifest.webmanifest']
+core=['./'+bundle_name,'./','./index.html','./style.css','./app.js','./app.bundle.js','./offline-support.js','./airflow3d.js','./battery-bubbles.js','./manifest.webmanifest']
 core+=['./'+str(p.relative_to(dist)).replace('\\','/') for p in sorted((dist/'assets').rglob('*')) if p.is_file()]
 hash_=hashlib.sha256()
 for rel in core:

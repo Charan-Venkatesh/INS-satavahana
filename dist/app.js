@@ -23,10 +23,11 @@ function pipe(points,branch='common',kind='main',radius=13){const p=network.addP
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
 // Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
 // 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
-const SUPPLY=45,passes=side=>branches[side].open,autoOut=side=>branches[side].auto?AUTO_SET:SUPPLY;
+// With the auto reducer bypassed the 45 kg/cm² also passes the hand reducer (it cannot regulate that inlet).
+const SUPPLY=45,passes=side=>branches[side].open,autoOut=side=>branches[side].auto?AUTO_SET:SUPPLY,handActive=side=>branches[side].hand&&branches[side].auto;
 // PG reading: hand reducer ON gives its setting (0.13–0.16), OFF leaves the auto reducer's 0.45 kg/cm².
 const AUTO_SET=.45,DIAL_MAX=.6,pgLabels={};
-const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(b.hand?b.value:autoOut(side)):0};
+const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(handActive(side)?b.value:autoOut(side)):0};
 function dialFace(c,size){const k0=size/256;c.save();c.scale(k0,k0);c.strokeStyle='#477262';c.fillStyle='#477262';c.lineWidth=2;c.textAlign='center';c.font='bold 17px Arial';for(let k=0;k<=12;k++){const a=(135+k*22.5)*Math.PI/180,r1=k%2?88:82;c.beginPath();c.moveTo(128+96*Math.cos(a),128+96*Math.sin(a));c.lineTo(128+r1*Math.cos(a),128+r1*Math.sin(a));c.stroke();if(k%2===0)c.fillText((k*.05).toFixed(1),128+66*Math.cos(a),134+66*Math.sin(a))}c.font='14px Arial';c.fillText('kg/cm²',128,184);c.restore()}
 let viewMode='top';
 let flowing=false,selected=null,labelVisible=true;const parts=new Map(),labelNodes=[],hotspots=[],wheels={},needles={},bodyGroups={};
@@ -72,7 +73,7 @@ function details(){const el=document.querySelector('#detail');if(!selected){el.i
  if(p.type==='pipe'){rows='<div><span>Pipe walls</span><b>Transparent</b></div><div><span>Visible air</span><b>Calculated flow, see below</b></div><div><span>Main pipe display size</span><b>50 mm · estimated</b></div>';controls='<div class="feature-list" id="airflow-readout"></div><img class="detail-image" src="assets/transparent-straight-pipe.png" alt="Transparent pipe with visible air"><div class="control-row"><button data-action="toggleair" class="primary">Pause / resume air</button></div>'}
  if(p.type==='shutoff'){rows='<div><span>Demonstration state</span><b>'+(b.open?'Open':'Closed')+'</b></div>';controls='<div class="control-row"><button data-action="open" class="'+(b.open?'primary':'')+'">ON · Open</button><button data-action="close" class="'+(!b.open?'primary':'')+'">OFF · Close</button></div>'}
  if(p.type==='auto'){rows='<div><span>State</span><b>'+(b.auto?'ON · green, reduces to 0.45 kg/cm²':'OFF · red, bypassed: 45 kg/cm² passes')+'</b></div><div><span>Drawing setpoint</span><b>0.45 kg/cm²</b></div><div><span>Top geometry</span><b>Square + V</b></div>';controls='<div class="control-row"><button data-action="autoon" class="'+(b.auto?'primary':'')+'">ON</button><button data-action="autooff" class="'+(!b.auto?'primary':'')+'">OFF</button></div><p class="tiny">Double-click the auto reducer to switch it ON or OFF.</p>'}
- if(p.type==='hand'){controls='<div class="control-row"><button data-action="handon" class="'+(b.hand?'primary':'')+'">ON · In line</button><button data-action="handoff" class="'+(!b.hand?'primary':'')+'">OFF · Bypassed</button></div><div class="value-readout"><span>Selected setting</span><strong>'+b.value.toFixed(3)+'</strong></div><div class="control-row"><button data-action="decrease" '+(!b.hand||b.value<=.130?'disabled':'')+'>− Decrease</button><button data-action="increase" '+(!b.hand||b.value>=.160?'disabled':'')+'>+ Increase</button></div>';rows='<div><span>State</span><b>'+(b.hand?'ON · PG reads 0.13–0.16':'OFF · PG reads 0.45')+'</b></div><div><span>Drawing range</span><b>0.13–0.16 kg/cm²</b></div><div><span>Moving part</span><b>Side handle only</b></div>'}
+ if(p.type==='hand'){controls='<div class="control-row"><button data-action="handon" class="'+(b.hand?'primary':'')+'">ON · In line</button><button data-action="handoff" class="'+(!b.hand?'primary':'')+'">OFF · Bypassed</button></div><div class="value-readout"><span>Selected setting</span><strong>'+b.value.toFixed(3)+'</strong></div><div class="control-row"><button data-action="decrease" '+(!b.hand||b.value<=.130?'disabled':'')+'>− Decrease</button><button data-action="increase" '+(!b.hand||b.value>=.160?'disabled':'')+'>+ Increase</button></div>';rows='<div><span>State</span><b>'+(!b.auto?'Passing 45 kg/cm² (auto reducer OFF)':b.hand?'ON · PG reads 0.13–0.16':'OFF · PG reads 0.45')+'</b></div><div><span>Drawing range</span><b>0.13–0.16 kg/cm²</b></div><div><span>Moving part</span><b>Side handle only</b></div>'}
  if(p.type==='pg'){rows='<div><span>Reading</span><b>'+pgValue(p.side).toFixed(3)+' kg/cm²</b></div><div><span>Set by</span><b>'+(b.hand?'Hand reducer ON (0.13–0.16)':'Auto reducer, hand OFF (0.45)')+'</b></div><div><span>Dial scale</span><b>0–0.6 kg/cm²</b></div><div><span>Dial orientation</span><b>Face up / top view</b></div>';controls='<p class="tiny">Reading follows the demonstration controls. It is not a measured pressure or a validated plant calculation.</p>'}
  if(p.type==='filter')rows='<div><span>Top geometry</span><b>Diamond symbol</b></div><div><span>Connection</span><b>Hand reducer → cells</b></div>';
  if(p.type==='safety'){const manual=performance.now()<(releasing[p.side]||0),lift=pgValue(p.side)>SAFETY_SET,on=venting(p.side);rows='<div><span>Drawing setpoint</span><b>0.2 kg/cm²</b></div><div><span>Line pressure</span><b>'+pgValue(p.side).toFixed(3)+' kg/cm²</b></div><div><span>Valve state</span><b>'+(on?'Open · venting through the holes':'No air in this branch')+'</b></div><div><span>Relief flow (calculated)</span><b>'+(air[p.side]?.mRelief?(air[p.side].mRelief*60000).toFixed(1)+' g/min':'0')+'</b></div><div><span>Outlet</span><b>Bell-shaped perforated head · air leaves through the holes</b></div>';controls='<p class="tiny">Both safety valves vent whenever their branch has air. Higher line pressure (hand reducer OFF, 0.45 kg/cm²) gives a stronger release.</p><img class="detail-image" src="assets/safety-release-detail.jpg" alt="User-supplied perforated circular safety part"><p class="tiny">The yellow battery cap is kept on the battery. This position uses the separate perforated part you supplied; visible air exits through its actual perforations when the release effect is on and this branch is open. Hidden valve internals are not modeled.</p>'}
@@ -132,7 +133,7 @@ let air={port:null,stbd:null,mTotal:0};
 const STAGE_COLOR={hi:new T.Color('#173a8c'),mid:new T.Color('#136fc4'),lo:new T.Color('#1597c9'),relief:new T.Color('#0a86b4')};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
- const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),auto:autoOut(side),hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
+ const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),auto:autoOut(side),hand:handActive(side),handSet:b.value,ventAlways:true,batteries:2})};
  air={port:f('port'),stbd:f('stbd')};air.mTotal=air.port.mBranch+air.stbd.mBranch;
 }
 function classifyAir(list){
@@ -151,7 +152,7 @@ function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const m=new T.Mat
   const vel=!pressurised?0:p.stage==='common'?air.mTotal/(hi*1.96e-4):p.stage==='header'?(b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
   p.ph+=dt*10*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
   sc.setScalar(pressurised?Math.max(p.radius,2.4):0);nativeAir.setMatrixAt(i,m.compose(v,q,sc));
-  const sp=!b||['common','header','hp'].includes(p.stage)?SUPPLY:p.stage==='auto'?autoOut(p.branch):b.hand?b.value:autoOut(p.branch);
+  const sp=!b||['common','header','hp'].includes(p.stage)?SUPPLY:p.stage==='auto'?autoOut(p.branch):handActive(p.branch)?b.value:autoOut(p.branch);
   nativeAir.setColorAt(i,p.stage==='safety'?STAGE_COLOR.relief:sp>=10?STAGE_COLOR.hi:sp>=.3?STAGE_COLOR.mid:STAGE_COLOR.lo)}
  nativeAir.instanceMatrix.needsUpdate=true;if(nativeAir.instanceColor)nativeAir.instanceColor.needsUpdate=true;plumeUpdate(dt);lidVapourUpdate(dt);airReadout()}
 // Live airflow numbers for the panel (system overview and pipes), refreshed a few times a second.
@@ -166,7 +167,7 @@ function airRows(side){const a=air[side];if(!a)return'';const B=side==='port'?'P
 function airReadout(){const now=performance.now();if(now-readoutAt<400)return;readoutAt=now;const el=document.querySelector('#airflow-readout');if(!el)return;
  const out=air.port&&air.stbd?air.port.mCells+air.port.mRelief+air.stbd.mCells+air.stbd.mRelief:0;
  el.innerHTML='<div><span>Supply (MP air)</span><b>45 kg/cm² · '+gpm(air.mTotal)+'</b></div>'+airRows('port')+airRows('stbd')+
-  '<div><span>Mass balance: in − (cells + relief)</span><b>'+((air.mTotal-out)*60000).toFixed(6)+' g/min</b></div>'}
+  '<div><span>Mass balance: in − (cells + relief)</span><b>'+(Math.abs(air.mTotal-out)<1e-12?0:(air.mTotal-out)*60000).toFixed(6)+' g/min</b></div>'}
 if(!webglAvailable)loading.remove();
 if(webglAvailable)Promise.all([new GLTFLoader().loadAsync('assets/assembled-battery-agitation.glb'),fetch('assets/assembled-air-particles.json').then(r=>{if(!r.ok)throw new Error('Air asset unavailable');return r.json()})]).then(([gltf,air])=>{
  const model=gltf.scene;model.name='ACTUAL_ASSEMBLED_BLENDER_MODEL';model.scale.setScalar(625);scene.add(model);scene.updateMatrixWorld(true);

@@ -35,7 +35,7 @@ function handWheel(g,side){const wheel=new T.Group();wheel.position.set(side==='
 function battery(g){box(g,292,152,36,mat.ivory,0,-16);box(g,302,160,8,mat.ivory,0,22);for(const row of [-1,1])for(let k=0;k<6;k++){const x=(-.4+.16*k)*292,z=row*.26*152;cyl(g,14,4,mat.metal,x,35,z);cyl(g,k===0||k===5?11.5:9.5,5,mat.black,x,40,z,k===0||k===5?6:48);cyl(g,5.5,5,mat.metal,x,45,z,6)}for(let k=1;k<5;k++)cyl(g,7,6,mat.metal,(-.4+.16*k)*292,36,0,6);cyl(g,8,9,mat.black,132,39,0);cyl(g,4.5,4,mat.blue,132,46,0)}
 // Fixed plan follows the supplied drawing. Supply divides into two mirrored branches.
 pipe([[960,170],[845,170],[845,300],[350,300]],'port','header');pipe([[845,300],[1420,300]],'stbd','header');
-label('MP Air 45 kg/cm²',1050,110,'left','Supply · drawing value');label('PORT',280,130,'center','','muted');label('STBD',1490,130,'center','','muted');
+label('MP Air 45 kg/cm²',1050,110,'left');label('PORT',280,130,'center','','muted');label('STBD',1490,130,'center','','muted');
 for(const [side,x] of [['port',350],['stbd',1420]]){
  const P=side==='port',B=P?'Port':'STBD',out=P?-1:1,inner=P?1:-1,pgX=P?165:1605,cellX=P?650:1120;
  let g=part(side+'-shutoff','shutoff',side,x,300,'Shut-off valve · '+B,108);cyl(g,55,17,mat.metal,0,4);cyl(g,48,7,mat.white,0,17);const wheel=new T.Group();wheel.position.y=24;g.add(wheel);line(wheel,[[-43,0,0],[43,0,0]]);line(wheel,[[0,0,-43],[0,0,43]]);g.userData.shutoffWheel=wheel;wheel.rotation.y=Math.PI/4;
@@ -48,7 +48,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,110);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
  g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x,1333,'center','0.2 kg/cm²');
- g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center','Connected to separate lid air inlet');
+ g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center');
  // "i" beside the 3D battery opens the transparent battery with bubble physics.
  {const info=document.createElement('button');info.className='battery-info';info.textContent='i';info.setAttribute('aria-label','Battery details · '+B);info.onclick=()=>openBattery(side);labelsRoot.append(info);labelNodes.push({el:info,x:cellX+(P?120:-120),z:1310})}
  const inletX=cellX+(P?-132:132);
@@ -295,7 +295,7 @@ function plumeUpdate(dt){
 function setView(mode){
  viewMode=mode;const front=mode==='front';
  camera.position.set(0,front?230:3000,front?3000:0);camera.up.set(0,front?1:0,front?0:-1);camera.lookAt(0,front?230:0,0);
- circuit.classList.toggle('front-view',front);document.querySelector('.locked').textContent=front?'▣ FRONT VIEW LOCKED':'▣ TOP VIEW LOCKED';
+ circuit.classList.toggle('front-view',front);
  document.querySelector('#view-top').setAttribute('aria-pressed',String(!front));document.querySelector('#view-front').setAttribute('aria-pressed',String(front));
  const badge=document.querySelector('.selected-badge');if(badge)badge.textContent=front?'FIXED FRONT VIEW':'FIXED TOP VIEW';
  circuit.setAttribute('aria-label',front?'Locked front-view 3D circuit':'Locked top-view battery agitation circuit');

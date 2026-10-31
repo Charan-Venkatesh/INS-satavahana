@@ -22,7 +22,7 @@ export const density = pg => (PATM + pg * KGF) / (R * T);           // kg/m³ at
 // orifice mass flow, kg/s, for pressure difference dp (Pa) with upstream gauge pressure pg (kg/cm²)
 const orifice = (d, dp, pg) => dp > 0 ? CD * area(d) * Math.sqrt(2 * density(pg) * dp) : 0;
 
-export function branchFlow({ supply = 45, open, hand, handSet, auto = 0.45, safety = 0.2, ventAlways = false }) {
+export function branchFlow({ supply = 45, open, hand, handSet, auto = 0.45, safety = 0.2, ventAlways = false, batteries = 1 }) {
   const st = { supply, afterShutoff: open ? supply : 0, afterAuto: open ? auto : 0, afterHand: 0, afterFilter: 0 };
   if (!open) return { ...st, mCells: 0, mRelief: 0, mBranch: 0, v: {}, filterDp: 0 };
   st.afterHand = hand ? handSet : auto;
@@ -30,7 +30,7 @@ export function branchFlow({ supply = 45, open, hand, handSet, auto = 0.45, safe
   // filter loss depends on the flow through it, so settle the line pressure in a few passes
   let line = st.afterHand, mCells = 0, mRelief = 0, filterDp = 0;
   for (let k = 0; k < 4; k++) {
-    mCells = EST.orifices * orifice(EST.orificeD, line * KGF - headP, line);
+    mCells = batteries * EST.orifices * orifice(EST.orificeD, line * KGF - headP, line);
     // relief valve: lifts above its setting; when held open (ventAlways) the whole line pressure drives the flow
     mRelief = ventAlways ? orifice(EST.reliefD, line * KGF, line) : line > safety ? orifice(EST.reliefD, (line - safety) * KGF, line) : 0;
     const v = (mCells + mRelief) / (density(st.afterHand) * area(EST.pipeID));
@@ -44,7 +44,7 @@ export function branchFlow({ supply = 45, open, hand, handSet, auto = 0.45, safe
     v: {                                                     // m/s in each pipe section
       header: vel(mBranch, supply), hp: vel(mBranch, supply), auto: vel(mBranch, auto),
       hand: vel(mBranch, st.afterHand), filter: vel(mBranch, line), manifold: vel(mCells, line),
-      hose: vel(mCells, line, EST.hoseID), safety: vel(mRelief, line)
+      hose: vel(mCells / batteries, line, EST.hoseID), safety: vel(mRelief, line)   // one hose per battery
     }
   };
 }

@@ -47,7 +47,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,130);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
  pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,110);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
- g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x,1333,'center','0.2 kg/cm²');
+ g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x+(P?-60:60),1333,'center','0.2 kg/cm²');
  g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center');
  // "i" beside the 3D battery opens the transparent battery with bubble physics.
  {const info=document.createElement('button');info.className='battery-info';info.textContent='i';info.setAttribute('aria-label','Battery details · '+B);info.onclick=()=>openBattery(side);labelsRoot.append(info);labelNodes.push({el:info,x:cellX+(P?120:-120),z:1310})}
@@ -115,7 +115,7 @@ let air={port:null,stbd:null,mTotal:0};
 const STAGE_COLOR={hi:new T.Color('#173a8c'),mid:new T.Color('#136fc4'),lo:new T.Color('#1597c9'),relief:new T.Color('#0a86b4')};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
- const f=side=>{const b=branches[side];return branchFlow({open:flowing&&b.open,hand:b.hand,handSet:b.value,ventAlways:true})};
+ const f=side=>{const b=branches[side];return branchFlow({open:flowing&&b.open,hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
  air={port:f('port'),stbd:f('stbd')};air.mTotal=air.port.mBranch+air.stbd.mBranch;
 }
 function classifyAir(list){
@@ -142,7 +142,7 @@ const gpm=kgs=>(kgs*60000).toFixed(kgs*60000<10?3:1)+' g/min';
 function airRows(side){const a=air[side];if(!a)return'';const B=side==='port'?'Port':'STBD';
  if(!a.mBranch)return'<div><span>'+B+' branch</span><b>'+(flowing?'Closed · no flow':'Paused')+'</b></div>';
  return '<div><span>'+B+' line pressure (after filter)</span><b>'+a.afterFilter.toFixed(3)+' kg/cm²</b></div>'+
-  '<div><span>'+B+' into cells (12 orifices)</span><b>'+gpm(a.mCells)+' · '+(a.mCells/density(a.afterFilter)*6e4).toFixed(2)+' L/min</b></div>'+
+  '<div><span>'+B+' into cells (2 batteries × 12 orifices)</span><b>'+gpm(a.mCells)+' · '+(a.mCells/density(a.afterFilter)*6e4).toFixed(2)+' L/min</b></div>'+
   '<div><span>'+B+' safety valve relief</span><b>'+(a.mRelief?gpm(a.mRelief):'0 · seated')+'</b></div>'+
   '<div><span>'+B+' velocity: header · main · hose</span><b>'+a.v.header.toFixed(3)+' · '+a.v.filter.toFixed(3)+' · '+a.v.hose.toFixed(2)+' m/s</b></div>'}
 function airReadout(){const now=performance.now();if(now-readoutAt<400)return;readoutAt=now;const el=document.querySelector('#airflow-readout');if(!el)return;
@@ -179,16 +179,18 @@ function rerouteBatteryHoses(air){
   // black rubber nipple: washer, body, spout
   const nip=new T.Group();nip.position.set(c.x,lid,c.z);scene.add(nip);(flatBattery[side]??=[]).push(nip);
   [[9,3,0],[6,9,3],[3.6,10,12]].forEach(([r,h,y])=>{const m=new T.Mesh(new T.CylinderGeometry(r*.92,r,h,24),rubber);m.position.y=y+h/2;m.castShadow=true;nip.add(m)});
-  const top=new T.Vector3(c.x,lid+22,c.z),dx=c.x-S.x;
-  const curve=new T.CatmullRomCurve3([S.clone(),new T.Vector3(S.x,S.y+28,S.z+40),new T.Vector3(S.x+dx*.25,S.y+62,S.z+(c.z-S.z)*.62),new T.Vector3(S.x+dx*.7,S.y+70,c.z-8),new T.Vector3(c.x,lid+60,c.z),top]);
-  const hose=new T.Mesh(new T.TubeGeometry(curve,96,3.4,14,false),hoseMat);hose.castShadow=true;scene.add(hose);flatBattery[side].push(hose);hoseMaterial=hoseMat;
+  const curve=frontHoseCurve(S,c,lid);frontHose[side]={S:S.clone(),c:c.clone(),lid,hose:null};
+  const hose=new T.Mesh(new T.TubeGeometry(curve,96,3.4,14,false),hoseMat);hose.castShadow=true;scene.add(hose);flatBattery[side].push(hose);hoseMaterial=hoseMat;frontHose[side].hose=hose;
   const parts=air.filter(p=>p.kind==='battery'&&p.branch===side);hoseAir[side]=parts;parts.forEach((p,k)=>{const n=p.frames.length;p.frames=p.framesFront=Array.from({length:n},(_,f)=>curve.getPointAt(((f/n)+k/parts.length)%1).toArray())})}
- photoLids(caps,starts);
+ photoLids(caps,starts,air);
 }
 // Same photo lid as the battery detail view: the original lid fittings are hidden and the shared lid is laid
 // on each real lid (long side along X), with its centre-row fittings at the model's own fitting positions.
 const lidVapours=[];
-function photoLids(caps,starts){
+// Arched hose from the manifold take-off S to the nipple at c on a lid whose top is at height lid.
+const frontHose={};
+function frontHoseCurve(S,c,lid){const dx=c.x-S.x;return new T.CatmullRomCurve3([S.clone(),new T.Vector3(S.x,S.y+28,S.z+40),new T.Vector3(S.x+dx*.25,S.y+62,S.z+(c.z-S.z)*.62),new T.Vector3(S.x+dx*.7,S.y+70,c.z-8),new T.Vector3(c.x,lid+60,c.z),new T.Vector3(c.x,lid+22,c.z)])}
+function photoLids(caps,starts,air){
  const sideOf=n=>{for(let p=n;p;p=p.parent){const m=/^(port|stbd)/i.exec(p.name);if(m)return m[1].toLowerCase()}return null};
  const lids={},yellow={port:new T.Box3(),stbd:new T.Box3()},clear={port:new T.Box3(),stbd:new T.Box3()},hole={port:new T.Box3(),stbd:new T.Box3()},hide=[];
  model3d.traverse(n=>{const name=n.name.toLowerCase(),side=sideOf(n);if(!side)return;
@@ -204,21 +206,39 @@ function photoLids(caps,starts){
   lid.group.scale.setScalar(s);lid.group.rotation.y=Math.PI/2;lid.group.position.set(c.x,box.max.y,c.z);scene.add(lid.group);
   const vap=createVapour(420);lid.group.add(vap.points);lidVapours.push({side,vap,vent:lid.vent,scale:s});
   flatBattery[side].push(lid.group);model3d.traverse(n=>{if(n.userData.touch_id===side+'-battery')flatBattery[side].push(n)});
-  topBattery(side,box,[k(caps[side]),k(yellow[side]),k(clear[side]),k(hole[side])],starts[side])}
+  const centre=[k(caps[side]),k(yellow[side]),k(clear[side]),k(hole[side])];
+  topBattery(side,box,centre,starts[side],hoseAir[side]||[]);
+  secondBattery(side,side==='port'?-150:150,box,centre,starts[side],air)}
  for(const n of hide)n.visible=false;
  applyBatteryView();
 }
 // Top view: each battery is shown as a live 3D cell at the drawing's angle (W / L / HEIGHT pose), standing where
 // the flat battery was; the clear hose from the manifold drops onto its nipple. Front view keeps the flat model.
 const flatBattery={},hoseAir={},topBatteries=[];let hoseMaterial=null;
-function topBattery(side,box,centre,S){
- const b=battery3D({centre}),sc=74,q=facing(new T.Vector3(0,0,-1),new T.Vector3(0,1,0)),c=box.getCenter(new T.Vector3());
+// A second, identical battery on each side, further along the same "To the Cells" manifold (dx in world units),
+// with its own hose from the manifold. Front view: the flat battery, lid fittings and nipple are cloned and set
+// just behind the first (FRONT_DZ) so the pair reads as a bank instead of overlapping; a new hose runs to it.
+// Top view: another live 3D cell beside the first.
+const FRONT_DZ=-170;
+function secondBattery(side,dx,box,centre,S,air){
+ const fh=frontHose[side],off=new T.Vector3(dx,0,FRONT_DZ);
+ for(const o of [...flatBattery[side]]){if(o===fh.hose)continue;const c=o.clone(true),k=o.parent===model3d?1/625:1;c.position.addScaledVector(off,k);o.parent.add(c);flatBattery[side].push(c);
+  if(o.userData.touch_id===side+'-battery'){c.userData={...c.userData,touch_id:side+'-battery-2'};c.updateMatrixWorld(true);integratedBatteries.push(createBatteryBubbles({scene,root:c,side,branches,isFlowing:()=>flowing,isFront:()=>viewMode==='front'}))}}
+ const S2=fh.S.clone().add(new T.Vector3(dx,0,0)),curve=frontHoseCurve(S2,fh.c.clone().add(off),fh.lid);
+ const hose=new T.Mesh(new T.TubeGeometry(curve,96,3.4,14,false),hoseMaterial);hose.castShadow=true;scene.add(hose);flatBattery[side].push(hose);
+ const src=hoseAir[side]||[],parts=src.map((p,k)=>{const n=p.frames.length,f=Array.from({length:n},(_,i)=>curve.getPointAt(((i/n)+k/src.length)%1).toArray());return {...p,frames:f,framesFront:f,framesTop:null}});
+ air.push(...parts);
+ topBattery(side,box.clone().translate(new T.Vector3(dx,0,0)),centre,S.clone().add(new T.Vector3(dx,0,0)),parts);
+ hoseAir[side].push(...parts);
+}
+function topBattery(side,box,centre,S,parts){
+ const b=battery3D({centre}),sc=60,q=facing(new T.Vector3(0,0,-1),new T.Vector3(0,1,0)),c=box.getCenter(new T.Vector3());
  b.group.scale.setScalar(sc);b.group.quaternion.copy(q);
  const mid=new T.Vector3(0,b.size.H/2*sc,0).applyQuaternion(q);b.group.position.set(c.x,190,c.z+20).sub(mid);scene.add(b.group);b.group.updateMatrixWorld(true);
  const N=b.group.localToWorld(b.nipple.clone()),up=new T.Vector3(0,1,0).applyQuaternion(q);
  const curve=new T.CatmullRomCurve3([S.clone(),new T.Vector3(S.x,S.y+25,S.z+25),S.clone().lerp(N,.5).add(new T.Vector3(0,40,0)),N.clone().addScaledVector(up,42),N.clone().addScaledVector(up,6)]);
  const hose=new T.Mesh(new T.TubeGeometry(curve,96,3.4,14,false),hoseMaterial);scene.add(hose);
- const parts=hoseAir[side]||[];parts.forEach((p,k)=>{const n=p.frames.length;p.framesTop=Array.from({length:n},(_,f)=>curve.getPointAt(((f/n)+k/parts.length)%1).toArray())});
+ parts.forEach((p,k)=>{const n=p.frames.length;p.framesTop=Array.from({length:n},(_,f)=>curve.getPointAt(((f/n)+k/parts.length)%1).toArray())});
  topBatteries.push({side,b,hose,sc});
 }
 function applyBatteryView(){

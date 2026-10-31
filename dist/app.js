@@ -146,6 +146,28 @@ function classifyAir(list){
  const base=list.filter(p=>p.kind!=='release');
  for(const p of base)for(const k of [1,2])list.push({...p,src:p,ph:(p.ph+k*p.frames.length/3)%p.frames.length});
 }
+// Clear, larger pipes: the model's merged pipe mesh is hidden and every section is rebuilt as a clear tube
+// along the path its air follows, PIPE_SCALE × the model's diameter (main 50 mm), with rounded joints at
+// bends and tees. Display size only; the airflow model keeps the real 1/2" bore.
+const PIPE_SCALE=1.7,PIPE_R={main:15.6,gauge:7.8,stub:4.4};
+function clearPipes(list,oldMaterial){
+ model3d.traverse(n=>{if(n.isMesh&&n.material===oldMaterial)n.visible=false});
+ // front faces with depth writes: where tubes and joint spheres overlap, the clear wall is drawn once, not stacked
+ const mat=new T.MeshPhysicalMaterial({color:'#d3e3e7',transparent:true,opacity:.34,roughness:.04,metalness:0,clearcoat:1,clearcoatRoughness:.03,side:T.FrontSide,depthWrite:true});
+ const best={};
+ for(const p of list){if(['release','battery'].includes(p.kind))continue;const key=p.branch+':'+p.stage;
+  let run=[p.frames[0]],runs=[run];for(let i=1;i<p.frames.length;i++){const a=p.frames[i-1],b=p.frames[i];if(Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])<25)run.push(b);else runs.push(run=[b])}
+  for(const r of runs){const len=r.reduce((s,q,i)=>i?s+Math.hypot(q[0]-r[i-1][0],q[1]-r[i-1][1],q[2]-r[i-1][2]):0,0);if(!best[key]||len>best[key].len)best[key]={len,r,stage:p.stage}}}
+ const group=new T.Group();group.name='CLEAR LARGE PIPES';scene.add(group);
+ for(const {r,stage} of Object.values(best)){if(r.length<2)continue;
+  const rad=(stage==='gauge'?PIPE_R.gauge:stage==='stub'?PIPE_R.stub:PIPE_R.main)*PIPE_SCALE;
+  // keep corners, drop points that continue straight on
+  const pts=[new T.Vector3(...r[0])];for(let i=1;i<r.length-1;i++){const a=new T.Vector3(...r[i-1]),b=new T.Vector3(...r[i]),c=new T.Vector3(...r[i+1]);if(b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize())<.995)pts.push(b)}pts.push(new T.Vector3(...r[r.length-1]));
+  const path=new T.CurvePath();for(let i=1;i<pts.length;i++)path.add(new T.LineCurve3(pts[i-1],pts[i]));
+  group.add(new T.Mesh(new T.TubeGeometry(path,Math.max(8,pts.length*6),rad,24,false),mat));
+  for(const q of pts){const j=new T.Mesh(new T.SphereGeometry(rad,24,14),mat);j.position.copy(q);group.add(j)}
+ }
+}
 function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const m=new T.Matrix4(),v=new T.Vector3(),w=new T.Vector3(),q=new T.Quaternion(),sc=new T.Vector3(),hi=density(45);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
   const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
@@ -179,7 +201,7 @@ if(webglAvailable)Promise.all([new GLTFLoader().loadAsync('assets/assembled-batt
  for(const node of needleNodes){const side=node.userData.touch_needle,c=node.userData.touch_center,pivot=new T.Group();pivot.position.set(c[0],c[2],-c[1]);model.add(pivot);scene.updateMatrixWorld(true);pivot.attach(node);pivot.userData.nativeBaseline=-(.145/.4)*Math.PI*1.5+Math.PI*.75;needles[side]=pivot;const cv=document.createElement('canvas');cv.width=cv.height=512;dialFace(cv.getContext('2d'),512);const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=4;const face=new T.Mesh(new T.PlaneGeometry(.154,.154),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,toneMapped:false}));face.rotation.x=-Math.PI/2;face.position.set(c[0],c[2]+.0028,-c[1]);face.renderOrder=2;model.add(face)}
  model.traverse(n=>{if(/gauge.?number|dial.?tick/i.test(n.name))n.visible=false});
  scene.updateMatrixWorld(true);model3d=model;buildPlume();rerouteBatteryHoses(air);autoReducerLamps();
- classifyAir(air);nativeAirFrames=air;nativeAir=new T.InstancedMesh(new T.SphereGeometry(1,10,8),new T.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),air.length);nativeAir.frustumCulled=false;nativeAir.instanceMatrix.setUsage(T.DynamicDrawUsage);for(let i=0;i<air.length;i++)nativeAir.setColorAt(i,new T.Color(air[i].kind==='release'?'#00a4d6':'#1a98e0'));scene.add(nativeAir);nativeAirUpdate(0);ground.visible=false;actualModelReady=true;loading.remove();renderer.render(scene,camera);
+ classifyAir(air);clearPipes(air.filter(p=>!p.src),pipeMaterial);nativeAirFrames=air;nativeAir=new T.InstancedMesh(new T.SphereGeometry(1,10,8),new T.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),air.length);nativeAir.frustumCulled=false;nativeAir.instanceMatrix.setUsage(T.DynamicDrawUsage);for(let i=0;i<air.length;i++)nativeAir.setColorAt(i,new T.Color(air[i].kind==='release'?'#00a4d6':'#1a98e0'));scene.add(nativeAir);nativeAirUpdate(0);ground.visible=false;actualModelReady=true;loading.remove();renderer.render(scene,camera);
 }).catch(error=>{loading.remove();const e=document.querySelector('#error');e.hidden=false;e.textContent='The assembled 3D model could not load. Please reload.';console.error(error)});
 
 const integratedBatteries=[];

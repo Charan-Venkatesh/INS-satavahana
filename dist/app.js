@@ -21,11 +21,12 @@ const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opa
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
-// Air passes beyond the auto reducer only with the shut-off open AND the auto reducer ON (double-click it to switch).
-const passes=side=>branches[side].open&&branches[side].auto;
+// Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
+// 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
+const SUPPLY=45,passes=side=>branches[side].open,autoOut=side=>branches[side].auto?AUTO_SET:SUPPLY;
 // PG reading: hand reducer ON gives its setting (0.13–0.16), OFF leaves the auto reducer's 0.45 kg/cm².
 const AUTO_SET=.45,DIAL_MAX=.6,pgLabels={};
-const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(b.hand?b.value:AUTO_SET):0};
+const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(b.hand?b.value:autoOut(side)):0};
 function dialFace(c,size){const k0=size/256;c.save();c.scale(k0,k0);c.strokeStyle='#477262';c.fillStyle='#477262';c.lineWidth=2;c.textAlign='center';c.font='bold 17px Arial';for(let k=0;k<=12;k++){const a=(135+k*22.5)*Math.PI/180,r1=k%2?88:82;c.beginPath();c.moveTo(128+96*Math.cos(a),128+96*Math.sin(a));c.lineTo(128+r1*Math.cos(a),128+r1*Math.sin(a));c.stroke();if(k%2===0)c.fillText((k*.05).toFixed(1),128+66*Math.cos(a),134+66*Math.sin(a))}c.font='14px Arial';c.fillText('kg/cm²',128,184);c.restore()}
 let viewMode='top';
 let flowing=false,selected=null,labelVisible=true;const parts=new Map(),labelNodes=[],hotspots=[],wheels={},needles={},bodyGroups={};
@@ -70,7 +71,7 @@ function details(){const el=document.querySelector('#detail');if(!selected){el.i
  const p=parts.get(selected),b=branches[p.side],side=p.side==='port'?'PORT':p.side==='stbd'?'STBD':'COMMON';let controls='',rows='';
  if(p.type==='pipe'){rows='<div><span>Pipe walls</span><b>Transparent</b></div><div><span>Visible air</span><b>Calculated flow, see below</b></div><div><span>Main pipe display size</span><b>50 mm · estimated</b></div>';controls='<div class="feature-list" id="airflow-readout"></div><img class="detail-image" src="assets/transparent-straight-pipe.png" alt="Transparent pipe with visible air"><div class="control-row"><button data-action="toggleair" class="primary">Pause / resume air</button></div>'}
  if(p.type==='shutoff'){rows='<div><span>Demonstration state</span><b>'+(b.open?'Open':'Closed')+'</b></div>';controls='<div class="control-row"><button data-action="open" class="'+(b.open?'primary':'')+'">ON · Open</button><button data-action="close" class="'+(!b.open?'primary':'')+'">OFF · Close</button></div>'}
- if(p.type==='auto'){rows='<div><span>State</span><b>'+(b.auto?'ON · green':'OFF · red, no air downstream')+'</b></div><div><span>Drawing setpoint</span><b>0.45 kg/cm²</b></div><div><span>Top geometry</span><b>Square + V</b></div>';controls='<div class="control-row"><button data-action="autoon" class="'+(b.auto?'primary':'')+'">ON</button><button data-action="autooff" class="'+(!b.auto?'primary':'')+'">OFF</button></div><p class="tiny">Double-click the auto reducer to switch it ON or OFF.</p>'}
+ if(p.type==='auto'){rows='<div><span>State</span><b>'+(b.auto?'ON · green, reduces to 0.45 kg/cm²':'OFF · red, bypassed: 45 kg/cm² passes')+'</b></div><div><span>Drawing setpoint</span><b>0.45 kg/cm²</b></div><div><span>Top geometry</span><b>Square + V</b></div>';controls='<div class="control-row"><button data-action="autoon" class="'+(b.auto?'primary':'')+'">ON</button><button data-action="autooff" class="'+(!b.auto?'primary':'')+'">OFF</button></div><p class="tiny">Double-click the auto reducer to switch it ON or OFF.</p>'}
  if(p.type==='hand'){controls='<div class="control-row"><button data-action="handon" class="'+(b.hand?'primary':'')+'">ON · In line</button><button data-action="handoff" class="'+(!b.hand?'primary':'')+'">OFF · Bypassed</button></div><div class="value-readout"><span>Selected setting</span><strong>'+b.value.toFixed(3)+'</strong></div><div class="control-row"><button data-action="decrease" '+(!b.hand||b.value<=.130?'disabled':'')+'>− Decrease</button><button data-action="increase" '+(!b.hand||b.value>=.160?'disabled':'')+'>+ Increase</button></div>';rows='<div><span>State</span><b>'+(b.hand?'ON · PG reads 0.13–0.16':'OFF · PG reads 0.45')+'</b></div><div><span>Drawing range</span><b>0.13–0.16 kg/cm²</b></div><div><span>Moving part</span><b>Side handle only</b></div>'}
  if(p.type==='pg'){rows='<div><span>Reading</span><b>'+pgValue(p.side).toFixed(3)+' kg/cm²</b></div><div><span>Set by</span><b>'+(b.hand?'Hand reducer ON (0.13–0.16)':'Auto reducer, hand OFF (0.45)')+'</b></div><div><span>Dial scale</span><b>0–0.6 kg/cm²</b></div><div><span>Dial orientation</span><b>Face up / top view</b></div>';controls='<p class="tiny">Reading follows the demonstration controls. It is not a measured pressure or a validated plant calculation.</p>'}
  if(p.type==='filter')rows='<div><span>Top geometry</span><b>Diamond symbol</b></div><div><span>Connection</span><b>Hand reducer → cells</b></div>';
@@ -87,8 +88,8 @@ const releasing={port:0,stbd:0},SAFETY_SET=.2;
 // the wheel eases to its target instead of jumping. Touching the valve toggles it.
 const WHEEL_SHUT=Math.PI/4,WHEEL_OPEN=-4*Math.PI,WHEEL_SPEED=3*Math.PI;   // shut rests as ×, open as + (≈2 turns apart); rad/s
 const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(w)w.userData.target=branches[side].open?WHEEL_OPEN:WHEEL_SHUT};
-// Auto reducer status colour: its square V cap is green while the auto reducer is ON and red when it is OFF
-// (double-click it to switch); the colour fades between states and pulses while air is passing through.
+// Auto reducer status colour: its square V cap is green while the auto reducer is ON (reducing) and red when it is
+// OFF (bypassed); double-click to switch. The colour fades between states and pulses while air is passing through.
 const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33');
 function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _]square[ _]symbol[ _]cap[ _]v/i.exec(n.name);if(!m||!n.isMesh)return;
  n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);autoLamps[m[1].toLowerCase()]={mesh:n,mix:0}})}
@@ -102,7 +103,7 @@ const openBattery=side=>openBatteryDetail({side,pressure:pgValue(side)||(branche
 // As requested, both safety valves vent whenever their branch has air (Start + shut-off open), at any line pressure.
 const venting=side=>flowing&&passes(side);
 function action(a){if(a==='toggleair'){document.querySelector('#air').click();return}if(!selected)return;const p=parts.get(selected),b=branches[p.side];if(a==='battery3d'){openBattery(p.side);return}if(a==='open'||a==='close'){b.open=a==='open';turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff')b.hand=a==='handon';if(a==='autoon'||a==='autooff')b.auto=a==='autoon';if(a==='increase'||a==='decrease'){if(!b.hand){details();return}const sign=a==='increase'?1:-1;const next=Math.min(.160,Math.max(.130,Math.round((b.value+sign*.005)*1000)/1000));if(next!==b.value){b.value=next;b.wheel+=sign*Math.PI/3}}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
-function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),t=v.toFixed(3)+' kg/cm²';if(pgLabels[side]&&pgLabels[side].textContent!==t)pgLabels[side].textContent=t;needles[side].rotation.y=-(v/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
+function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),over=v>DIAL_MAX,t=v.toFixed(3)+' kg/cm²'+(over?' · OVER RANGE':'');if(pgLabels[side]&&pgLabels[side].textContent!==t){pgLabels[side].textContent=t;pgLabels[side].style.color=over?'#c0392b':''}needles[side].rotation.y=-(Math.min(v,DIAL_MAX*1.04)/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
 function showRunState(){
  for(const id of ['#air','#start']){const button=document.querySelector(id);button.innerHTML=flowing?'<span>Ⅱ</span> Pause':'<span>▶</span> Start';button.setAttribute('aria-pressed',String(flowing));button.disabled=!webglAvailable}
  document.querySelector('#flow-status').textContent=webglAvailable?(flowing?'PORT '+(branches.port.open?'ON':'OFF')+' · STBD '+(branches.stbd.open?'ON':'OFF'):'READY · PRESS START'):'STATIC 3D VIEW';document.querySelector('.live-dot').style.background=flowing?'#1caf93':'#97a89c';
@@ -131,7 +132,7 @@ let air={port:null,stbd:null,mTotal:0};
 const STAGE_COLOR={hi:new T.Color('#173a8c'),mid:new T.Color('#136fc4'),lo:new T.Color('#1597c9'),relief:new T.Color('#0a86b4')};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
- const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
+ const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),auto:autoOut(side),hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
  air={port:f('port'),stbd:f('stbd')};air.mTotal=air.port.mBranch+air.stbd.mBranch;
 }
 function classifyAir(list){
@@ -146,11 +147,12 @@ function classifyAir(list){
 }
 function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const m=new T.Matrix4(),v=new T.Vector3(),w=new T.Vector3(),q=new T.Quaternion(),sc=new T.Vector3(),hi=density(45);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
-  const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open&&(p.stage==='hp'||b.auto)))&&(p.kind!=='safety'||venting(p.branch));
+  const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
   const vel=!pressurised?0:p.stage==='common'?air.mTotal/(hi*1.96e-4):p.stage==='header'?(b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
   p.ph+=dt*10*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
   sc.setScalar(pressurised?Math.max(p.radius,2.4):0);nativeAir.setMatrixAt(i,m.compose(v,q,sc));
-  nativeAir.setColorAt(i,['common','header','hp'].includes(p.stage)?STAGE_COLOR.hi:p.stage==='auto'||(p.stage!=='safety'&&b&&!b.hand)?STAGE_COLOR.mid:p.stage==='safety'?STAGE_COLOR.relief:STAGE_COLOR.lo)}
+  const sp=!b||['common','header','hp'].includes(p.stage)?SUPPLY:p.stage==='auto'?autoOut(p.branch):b.hand?b.value:autoOut(p.branch);
+  nativeAir.setColorAt(i,p.stage==='safety'?STAGE_COLOR.relief:sp>=10?STAGE_COLOR.hi:sp>=.3?STAGE_COLOR.mid:STAGE_COLOR.lo)}
  nativeAir.instanceMatrix.needsUpdate=true;if(nativeAir.instanceColor)nativeAir.instanceColor.needsUpdate=true;plumeUpdate(dt);lidVapourUpdate(dt);airReadout()}
 // Live airflow numbers for the panel (system overview and pipes), refreshed a few times a second.
 let readoutAt=0;

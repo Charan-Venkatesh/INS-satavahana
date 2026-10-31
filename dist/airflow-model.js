@@ -20,7 +20,15 @@ export const EST = {
 const area = d => Math.PI * d * d / 4;
 export const density = pg => (PATM + pg * KGF) / (R * T);           // kg/m³ at gauge pressure pg (kg/cm²)
 // orifice mass flow, kg/s, for pressure difference dp (Pa) with upstream gauge pressure pg (kg/cm²)
-const orifice = (d, dp, pg) => dp > 0 ? CD * area(d) * Math.sqrt(2 * density(pg) * dp) : 0;
+// Below the critical ratio: incompressible orifice equation. At 45 kg/cm² the flow is choked (sonic), so the
+// compressible form is used: m = Cd·A·P0·sqrt(γ/(R·T))·(2/(γ+1))^((γ+1)/(2(γ−1))).
+const GAMMA = 1.4, CHOKE = Math.pow(2 / (GAMMA + 1), GAMMA / (GAMMA - 1));            // p_down / p_up ≈ 0.528
+const orifice = (d, dp, pg) => {
+  if (dp <= 0) return 0;
+  const p0 = PATM + pg * KGF, pd = p0 - dp;
+  if (pd / p0 <= CHOKE) return CD * area(d) * p0 * Math.sqrt(GAMMA / (R * T)) * Math.pow(2 / (GAMMA + 1), (GAMMA + 1) / (2 * (GAMMA - 1)));
+  return CD * area(d) * Math.sqrt(2 * density(pg) * dp);
+};
 
 export function branchFlow({ supply = 45, open, hand, handSet, auto = 0.45, safety = 0.2, ventAlways = false, batteries = 1 }) {
   const st = { supply, afterShutoff: open ? supply : 0, afterAuto: open ? auto : 0, afterHand: 0, afterFilter: 0 };

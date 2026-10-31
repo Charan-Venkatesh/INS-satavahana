@@ -17,9 +17,9 @@ export function createBatteryBubbles({scene,root,side,branches,isFlowing,isFront
  // Appearance defaults only: pressure is deliberately NOT converted into flow or velocity.
  // Smaller, staggered bubbles replace the exaggerated uniformly filled columns.
  for(let i=0;i<72;i++){const m=new T.Mesh(geo,material);const r=size.x*(.0035+(i*31%89)/89*.006);m.scale.setScalar(r);group.add(m);bubbles.push({m,lane:i%6,phase:(i*73%113)/113,speed:.13+(i*17%29)/29*.10,r,t:(i*73%113)/113,alive:true})}
- let wasOpen=branches[side].open;
+ let wasOpen=branches[side].open&&branches[side].auto!==false;
  return {update(dt){const front=isFront();group.visible=front;shell.material=front?glass:original;shell.castShadow=!front;ribs.forEach(n=>n.visible=!front);if(!front)return;
- const moving=isFlowing(),open=branches[side].open;
+ const moving=isFlowing(),open=branches[side].open&&branches[side].auto!==false;
  if(open&&!wasOpen)for(const b of bubbles){b.alive=true;b.t=b.phase}wasOpen=open;
  for(const b of bubbles){
   if(moving){b.t+=dt*b.speed;if(b.t>=1){b.t%=1;b.alive=open}}

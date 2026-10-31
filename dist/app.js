@@ -20,15 +20,17 @@ function line(parent,points,ma=mat.ink,r=2.7){for(let i=1;i<points.length;i++){c
 const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opacity:.11}),0,-14,0);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
-const branches={port:{open:false,hand:true,value:.145,wheel:0},stbd:{open:false,hand:true,value:.145,wheel:0}};
+const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
+// Air passes beyond the auto reducer only with the shut-off open AND the auto reducer ON (double-click it to switch).
+const passes=side=>branches[side].open&&branches[side].auto;
 // PG reading: hand reducer ON gives its setting (0.13–0.16), OFF leaves the auto reducer's 0.45 kg/cm².
 const AUTO_SET=.45,DIAL_MAX=.6,pgLabels={};
-const pgValue=side=>{const b=branches[side];return flowing&&b.open?(b.hand?b.value:AUTO_SET):0};
+const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(b.hand?b.value:AUTO_SET):0};
 function dialFace(c,size){const k0=size/256;c.save();c.scale(k0,k0);c.strokeStyle='#477262';c.fillStyle='#477262';c.lineWidth=2;c.textAlign='center';c.font='bold 17px Arial';for(let k=0;k<=12;k++){const a=(135+k*22.5)*Math.PI/180,r1=k%2?88:82;c.beginPath();c.moveTo(128+96*Math.cos(a),128+96*Math.sin(a));c.lineTo(128+r1*Math.cos(a),128+r1*Math.sin(a));c.stroke();if(k%2===0)c.fillText((k*.05).toFixed(1),128+66*Math.cos(a),134+66*Math.sin(a))}c.font='14px Arial';c.fillText('kg/cm²',128,184);c.restore()}
 let viewMode='top';
 let flowing=false,selected=null,labelVisible=true;const parts=new Map(),labelNodes=[],hotspots=[],wheels={},needles={},bodyGroups={};
 function label(text,x,z,align='left',sub='',classes=''){const el=document.createElement('div');el.className='drawing-label '+align+' '+classes;const strong=document.createElement('span');strong.textContent=text;el.append(strong);if(sub){const sm=document.createElement('small');sm.textContent=sub;el.append(sm)}labelsRoot.append(el);labelNodes.push({el,x,z});return el}
-function part(id,type,side,x,z,title,size=108){const g=new T.Group();g.position.copy(pos(x,z));scene.add(g);const data={id,type,side,x,z,title,group:g,size};parts.set(id,data);bodyGroups[id]=g;const b=document.createElement('button');b.className='part-button';b.dataset.part=id;b.setAttribute('aria-label',title);b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{select(id);if(type==='shutoff')action(branches[side].open?'close':'open')});labelsRoot.append(b);hotspots.push({el:b,x,z,size});return g}
+function part(id,type,side,x,z,title,size=108){const g=new T.Group();g.position.copy(pos(x,z));scene.add(g);const data={id,type,side,x,z,title,group:g,size};parts.set(id,data);bodyGroups[id]=g;const b=document.createElement('button');b.className='part-button';b.dataset.part=id;b.setAttribute('aria-label',title);b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{select(id);if(type==='shutoff')action(branches[side].open?'close':'open')});if(type==='auto')b.addEventListener('dblclick',()=>{select(id);action(branches[side].auto?'autooff':'autoon')});labelsRoot.append(b);hotspots.push({el:b,x,z,size});return g}
 function squareSymbol(g,symbol){box(g,112,112,25,mat.edge,0,-3);box(g,101,101,27,mat.white,0,0);if(symbol==='V')line(g,[[-45,32,-44],[0,32,44],[45,32,-44]]);else{line(g,[[-44,32,-44],[44,32,44]]);line(g,[[44,32,-44],[-44,32,44]])}}
 function gauge(g,side){cyl(g,56,19,mat.metal,0,6);cyl(g,49,3,mat.white,0,17);const cv=document.createElement('canvas');cv.width=256;cv.height=256;const c=cv.getContext('2d');c.clearRect(0,0,256,256);c.strokeStyle='#477262';c.fillStyle='#477262';dialFace(c,256);const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;const face=mesh(g,new T.PlaneGeometry(98,98),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}),0,20);face.rotation.x=-Math.PI/2;const needle=new T.Group();needle.position.y=24;g.add(needle);line(needle,[[0,0,0],[0,0,-36]],mat.ink,2.5);cyl(needle,5,3,mat.ink);needles[side]=needle}
 function handWheel(g,side){const wheel=new T.Group();wheel.position.set(side==='port'?-87:87,23,0);g.add(wheel);const torus=mesh(wheel,new T.TorusGeometry(24,4,10,36),mat.black);torus.rotation.y=Math.PI/2;line(wheel,[[0,-21,0],[0,21,0]],mat.black,3);line(wheel,[[0,0,-21],[0,0,21]],mat.black,3);const sign=side==='port'?1:-1;line(g,[[sign*-55,22,0],[sign*-87,22,0]],mat.metal,5);wheels[side]=wheel}
@@ -68,7 +70,7 @@ function details(){const el=document.querySelector('#detail');if(!selected){el.i
  const p=parts.get(selected),b=branches[p.side],side=p.side==='port'?'PORT':p.side==='stbd'?'STBD':'COMMON';let controls='',rows='';
  if(p.type==='pipe'){rows='<div><span>Pipe walls</span><b>Transparent</b></div><div><span>Visible air</span><b>Calculated flow, see below</b></div><div><span>Main pipe display size</span><b>50 mm · estimated</b></div>';controls='<div class="feature-list" id="airflow-readout"></div><img class="detail-image" src="assets/transparent-straight-pipe.png" alt="Transparent pipe with visible air"><div class="control-row"><button data-action="toggleair" class="primary">Pause / resume air</button></div>'}
  if(p.type==='shutoff'){rows='<div><span>Demonstration state</span><b>'+(b.open?'Open':'Closed')+'</b></div>';controls='<div class="control-row"><button data-action="open" class="'+(b.open?'primary':'')+'">ON · Open</button><button data-action="close" class="'+(!b.open?'primary':'')+'">OFF · Close</button></div>'}
- if(p.type==='auto')rows='<div><span>Drawing setpoint</span><b>0.45 kg/cm²</b></div><div><span>Top geometry</span><b>Square + V</b></div>';
+ if(p.type==='auto'){rows='<div><span>State</span><b>'+(b.auto?'ON · green':'OFF · red, no air downstream')+'</b></div><div><span>Drawing setpoint</span><b>0.45 kg/cm²</b></div><div><span>Top geometry</span><b>Square + V</b></div>';controls='<div class="control-row"><button data-action="autoon" class="'+(b.auto?'primary':'')+'">ON</button><button data-action="autooff" class="'+(!b.auto?'primary':'')+'">OFF</button></div><p class="tiny">Double-click the auto reducer to switch it ON or OFF.</p>'}
  if(p.type==='hand'){controls='<div class="control-row"><button data-action="handon" class="'+(b.hand?'primary':'')+'">ON · In line</button><button data-action="handoff" class="'+(!b.hand?'primary':'')+'">OFF · Bypassed</button></div><div class="value-readout"><span>Selected setting</span><strong>'+b.value.toFixed(3)+'</strong></div><div class="control-row"><button data-action="decrease" '+(!b.hand||b.value<=.130?'disabled':'')+'>− Decrease</button><button data-action="increase" '+(!b.hand||b.value>=.160?'disabled':'')+'>+ Increase</button></div>';rows='<div><span>State</span><b>'+(b.hand?'ON · PG reads 0.13–0.16':'OFF · PG reads 0.45')+'</b></div><div><span>Drawing range</span><b>0.13–0.16 kg/cm²</b></div><div><span>Moving part</span><b>Side handle only</b></div>'}
  if(p.type==='pg'){rows='<div><span>Reading</span><b>'+pgValue(p.side).toFixed(3)+' kg/cm²</b></div><div><span>Set by</span><b>'+(b.hand?'Hand reducer ON (0.13–0.16)':'Auto reducer, hand OFF (0.45)')+'</b></div><div><span>Dial scale</span><b>0–0.6 kg/cm²</b></div><div><span>Dial orientation</span><b>Face up / top view</b></div>';controls='<p class="tiny">Reading follows the demonstration controls. It is not a measured pressure or a validated plant calculation.</p>'}
  if(p.type==='filter')rows='<div><span>Top geometry</span><b>Diamond symbol</b></div><div><span>Connection</span><b>Hand reducer → cells</b></div>';
@@ -85,22 +87,22 @@ const releasing={port:0,stbd:0},SAFETY_SET=.2;
 // the wheel eases to its target instead of jumping. Touching the valve toggles it.
 const WHEEL_SHUT=Math.PI/4,WHEEL_OPEN=-4*Math.PI,WHEEL_SPEED=3*Math.PI;   // shut rests as ×, open as + (≈2 turns apart); rad/s
 const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(w)w.userData.target=branches[side].open?WHEEL_OPEN:WHEEL_SHUT};
-// Auto reducer status colour: its square V cap glows green while air passes through it (Start + shut-off open)
-// and red when it is off; the colour fades between states and the green gently pulses while on.
+// Auto reducer status colour: its square V cap is green while the auto reducer is ON and red when it is OFF
+// (double-click it to switch); the colour fades between states and pulses while air is passing through.
 const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33');
 function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _]square[ _]symbol[ _]cap[ _]v/i.exec(n.name);if(!m||!n.isMesh)return;
  n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);autoLamps[m[1].toLowerCase()]={mesh:n,mix:0}})}
-function lampUpdate(dt){const t=performance.now()/1000,c=new T.Color();for(const side in autoLamps){const l=autoLamps[side],on=flowing&&branches[side].open;
+function lampUpdate(dt){const t=performance.now()/1000,c=new T.Color();for(const side in autoLamps){const l=autoLamps[side],on=branches[side].auto,live=flowing&&passes(side);
  l.mix+=((on?1:0)-l.mix)*Math.min(1,dt*5);c.copy(LAMP_OFF).lerp(LAMP_ON,l.mix);l.mesh.material.color.copy(c);
- if(l.mesh.material.emissive){l.mesh.material.emissive.copy(c);l.mesh.material.emissiveIntensity=.25+(on?.35*(.5+.5*Math.sin(t*4)):0)}}}
+ if(l.mesh.material.emissive){l.mesh.material.emissive.copy(c);l.mesh.material.emissiveIntensity=.25+(live?.35*(.5+.5*Math.sin(t*4)):0)}}}
 function wheelUpdate(dt){lampUpdate(dt);for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w||w.userData.target==null)continue;
  const d=w.userData.target-w.rotation.y,step=WHEEL_SPEED*dt;w.rotation.y+=Math.abs(d)<=step?d:Math.sign(d)*step}}
 // Battery detail starts at this branch's PG reading, or the hand reducer setting when no air is flowing.
 const openBattery=side=>openBatteryDetail({side,pressure:pgValue(side)||(branches[side].hand?branches[side].value:AUTO_SET)});
 // As requested, both safety valves vent whenever their branch has air (Start + shut-off open), at any line pressure.
-const venting=side=>flowing&&branches[side].open;
-function action(a){if(a==='toggleair'){document.querySelector('#air').click();return}if(!selected)return;const p=parts.get(selected),b=branches[p.side];if(a==='battery3d'){openBattery(p.side);return}if(a==='open'||a==='close'){b.open=a==='open';turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff')b.hand=a==='handon';if(a==='increase'||a==='decrease'){if(!b.hand){details();return}const sign=a==='increase'?1:-1;const next=Math.min(.160,Math.max(.130,Math.round((b.value+sign*.005)*1000)/1000));if(next!==b.value){b.value=next;b.wheel+=sign*Math.PI/3}}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
-function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||b.open;const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),t=v.toFixed(3)+' kg/cm²';if(pgLabels[side]&&pgLabels[side].textContent!==t)pgLabels[side].textContent=t;needles[side].rotation.y=-(v/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
+const venting=side=>flowing&&passes(side);
+function action(a){if(a==='toggleair'){document.querySelector('#air').click();return}if(!selected)return;const p=parts.get(selected),b=branches[p.side];if(a==='battery3d'){openBattery(p.side);return}if(a==='open'||a==='close'){b.open=a==='open';turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff')b.hand=a==='handon';if(a==='autoon'||a==='autooff')b.auto=a==='autoon';if(a==='increase'||a==='decrease'){if(!b.hand){details();return}const sign=a==='increase'?1:-1;const next=Math.min(.160,Math.max(.130,Math.round((b.value+sign*.005)*1000)/1000));if(next!==b.value){b.value=next;b.wheel+=sign*Math.PI/3}}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
+function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),t=v.toFixed(3)+' kg/cm²';if(pgLabels[side]&&pgLabels[side].textContent!==t)pgLabels[side].textContent=t;needles[side].rotation.y=-(v/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
 function showRunState(){
  for(const id of ['#air','#start']){const button=document.querySelector(id);button.innerHTML=flowing?'<span>Ⅱ</span> Pause':'<span>▶</span> Start';button.setAttribute('aria-pressed',String(flowing));button.disabled=!webglAvailable}
  document.querySelector('#flow-status').textContent=webglAvailable?(flowing?'PORT '+(branches.port.open?'ON':'OFF')+' · STBD '+(branches.stbd.open?'ON':'OFF'):'READY · PRESS START'):'STATIC 3D VIEW';document.querySelector('.live-dot').style.background=flowing?'#1caf93':'#97a89c';
@@ -111,7 +113,7 @@ showRunState();
 document.querySelector('#labels-toggle').onclick=()=>{labelVisible=!labelVisible;circuit.classList.toggle('hide-labels',!labelVisible);document.querySelector('#labels-toggle').textContent=labelVisible?'☷  Hide drawing labels':'☷  Show drawing labels';document.querySelector('#labels-toggle').setAttribute('aria-pressed',String(labelVisible))};
 document.querySelector('#controls-toggle').onclick=()=>{const open=document.body.classList.toggle('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded',String(open))};
 document.querySelector('#clear').onclick=()=>{document.body.classList.remove('inspector-open');document.querySelector('#controls-toggle').setAttribute('aria-expanded','false');selected=null;document.querySelector('#component-select').value='';hotspots.forEach(h=>{h.el.classList.remove('selected');h.el.setAttribute('aria-pressed','false')});details()};
-document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,hand:true,value:.145,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;showRunState();if(!labelVisible)document.querySelector('#labels-toggle').click();document.querySelector('#clear').click()};
+document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,auto:true,hand:true,value:.145,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;showRunState();if(!labelVisible)document.querySelector('#labels-toggle').click();document.querySelector('#clear').click()};
 document.querySelector('#reference').onclick=()=>document.querySelector('#reference-dialog').showModal();document.querySelector('#close-reference').onclick=()=>document.querySelector('#reference-dialog').close();
 document.querySelector('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{document.querySelector('#fullscreen').textContent='Use browser full screen'}};document.addEventListener('fullscreenchange',()=>document.querySelector('#fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen');
 // No OrbitControls, drag handlers, zoom or camera animation. Resize only fits the same plan.
@@ -129,7 +131,7 @@ let air={port:null,stbd:null,mTotal:0};
 const STAGE_COLOR={hi:new T.Color('#173a8c'),mid:new T.Color('#136fc4'),lo:new T.Color('#1597c9'),relief:new T.Color('#0a86b4')};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
- const f=side=>{const b=branches[side];return branchFlow({open:flowing&&b.open,hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
+ const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),hand:b.hand,handSet:b.value,ventAlways:true,batteries:2})};
  air={port:f('port'),stbd:f('stbd')};air.mTotal=air.port.mBranch+air.stbd.mBranch;
 }
 function classifyAir(list){
@@ -144,7 +146,7 @@ function classifyAir(list){
 }
 function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const m=new T.Matrix4(),v=new T.Vector3(),w=new T.Vector3(),q=new T.Quaternion(),sc=new T.Vector3(),hi=density(45);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
-  const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
+  const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open&&(p.stage==='hp'||b.auto)))&&(p.kind!=='safety'||venting(p.branch));
   const vel=!pressurised?0:p.stage==='common'?air.mTotal/(hi*1.96e-4):p.stage==='header'?(b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
   p.ph+=dt*10*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
   sc.setScalar(pressurised?Math.max(p.radius,2.4):0);nativeAir.setMatrixAt(i,m.compose(v,q,sc));
@@ -262,7 +264,7 @@ function applyBatteryView(){
  for(const side in hoseAir)for(const p of hoseAir[side])p.frames=top&&p.framesTop?p.framesTop:p.framesFront;
 }
 function lidVapourUpdate(dt){
- const px=renderer.domElement.height/(camera.top-camera.bottom),lv=side=>flowing&&branches[side].open?Math.min(1,.35+pgValue(side)/.16*.4):0;
+ const px=renderer.domElement.height/(camera.top-camera.bottom),lv=side=>flowing&&passes(side)?Math.min(1,.35+pgValue(side)/.16*.4):0;
  for(const l of lidVapours)l.vap.update(dt,lv(l.side),l.vent,px*l.scale,false);
  for(const t of topBatteries)t.b.update(dt,lv(t.side),px*t.sc);
 }

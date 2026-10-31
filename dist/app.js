@@ -6,7 +6,7 @@ import * as T from 'three';
 import {AirflowNetwork} from './airflow3d.js';
 import {GLTFLoader} from './assets/loaders/GLTFLoader.js';
 const host=document.querySelector('#viewport'),labelsRoot=document.querySelector('#labels'),circuit=document.querySelector('#circuit');
-const scene=new T.Scene();scene.background=new T.Color('#eef3ee');
+const scene=new T.Scene();scene.background=new T.Color('#22282b');
 const camera=new T.OrthographicCamera(-950,950,800,-800,1,10000);camera.position.set(0,3000,0);camera.up.set(0,0,-1);camera.lookAt(0,0,0);
 let renderer,webglAvailable=true;try{if(new URLSearchParams(location.search).get('static')==='1')throw new Error('Static display requested');renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true})}catch{webglAvailable=false;const image=document.createElement('img');image.src='assets/assembled-top-view.jpg';image.alt='Assembled 3D battery agitation circuit, fixed top view';image.className='static-render';renderer={domElement:image,shadowMap:{},setPixelRatio(){},setSize(){},render(){}};document.body.classList.add('static-mode');document.querySelector('#flow-status').textContent='STATIC 3D VIEW';document.querySelector('#air').disabled=true;document.querySelector('#labels-toggle').disabled=true}renderer.setPixelRatio(Math.min(devicePixelRatio,2));renderer.outputColorSpace=T.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;host.append(renderer.domElement);
 scene.add(new T.HemisphereLight(0xffffff,0x9ab7a3,2.5));const sun=new T.DirectionalLight(0xffffff,3);sun.position.set(-500,1600,-700);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-1100,right:1100,top:900,bottom:-900,near:1,far:4000});sun.shadow.bias=-.0002;scene.add(sun);
@@ -20,6 +20,8 @@ function line(parent,points,ma=mat.ink,r=2.7){for(let i=1;i<points.length;i++){c
 const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opacity:.11}),0,-14,0);ground.rotation.x=-Math.PI/2;ground.receiveShadow=true;
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
+// Dark studio look for the circuit (as in the reference rendering): dark backdrop, light drawing labels.
+{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{color:#cfe0e2}';document.head.append(st)}
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
 // Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
 // 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
@@ -130,7 +132,7 @@ for(const p of parts.values())p.group.visible=false;network.group.visible=false;
 // coloured by pressure stage; dead-end lines stay pressurised but still. Speeds are shown on a log scale
 // (0.01–10 m/s would otherwise be invisible or a blur); the panel lists the true values.
 let air={port:null,stbd:null,mTotal:0};
-const STAGE_COLOR={hi:new T.Color('#173a8c'),mid:new T.Color('#136fc4'),lo:new T.Color('#1597c9'),relief:new T.Color('#0a86b4')};
+const STAGE_COLOR={hi:new T.Color('#2a5cff'),mid:new T.Color('#1fa0ff'),lo:new T.Color('#2fd8ff'),relief:new T.Color('#46c8ff')};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
  const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),auto:autoOut(side),hand:handActive(side),handSet:b.value,ventAlways:true,batteries:2})};
@@ -150,33 +152,114 @@ function classifyAir(list){
 // along the path its air follows, PIPE_SCALE × the model's diameter (main 50 mm), with rounded joints at
 // bends and tees. Display size only; the airflow model keeps the real 1/2" bore.
 const PIPE_SCALE=1.7,PIPE_R={main:15.6,gauge:7.8,stub:4.4};
+// Studio reflections for the glass: long soft-box strips overhead (both directions, so pipes running either way
+// catch a streak) in a dim room, prefiltered once with PMREM.
+function glassEnvironment(){
+ const s=new T.Scene();s.background=new T.Color('#0b0e10');const pm=new T.PMREMGenerator(renderer),lit=new T.MeshBasicMaterial({color:new T.Color(6,6,6),side:T.DoubleSide});
+ for(const [w,d,x,z] of [[14,.5,0,-2],[.5,14,-2.5,0],[14,.25,0,3],[.25,14,3,0]]){const m=new T.Mesh(new T.PlaneGeometry(w,d),lit);m.rotation.x=Math.PI/2;m.position.set(x,6,z);s.add(m)}
+ const env=pm.fromScene(s,.02).texture;pm.dispose();return env;
+}
+// Streamlines: bright blue light trails running through each glass pipe (as in the reference rendering). Each
+// section gets a bundle of filaments spread across the bore with a gentle twist; a moving bright head with a fading
+// tail travels along each one at the section's calculated speed. They appear only where released air has reached.
+const pipeSections=[],STREAMS_PER=22;
+function buildStreamlines(){
+ const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=4;scene.add(group);
+ for(const sec of pipeSections){
+  const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,
+   uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#1593e6')}},
+   vertexShader:'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,vec3(.9,.98,1.),head*.7)*a,a);}'});
+  // polyline length and a perpendicular frame per segment
+  const P=sec.pts;let total=0;for(let i=1;i<P.length;i++)total+=P[i].distanceTo(P[i-1]);mat.uniforms.uLen.value=total;
+  for(let k=0;k<STREAMS_PER;k++){
+   const seed=(k*37%STREAMS_PER)/STREAMS_PER,ang0=k/STREAMS_PER*Math.PI*2,rr=sec.rad*(.25+.55*((k*53%97)/97)),pos=[],us=[],seeds=[];let u=0;
+   for(let i=1;i<P.length;i++){const a=P[i-1],b=P[i],d=b.clone().sub(a),L=d.length();d.normalize();
+    const n1=new T.Vector3(0,1,0).cross(d);if(n1.lengthSq()<1e-6)n1.set(1,0,0);n1.normalize();const n2=d.clone().cross(n1).normalize();
+    const steps=Math.max(2,Math.ceil(L/5));for(let j=(i===1?0:1);j<=steps;j++){const t=j/steps,uu=u+L*t,ang=ang0+uu*.02;
+     const p=a.clone().addScaledVector(d,L*t).addScaledVector(n1,Math.cos(ang)*rr).addScaledVector(n2,Math.sin(ang)*rr);pos.push(p.x,p.y,p.z);us.push(uu);seeds.push(seed)}
+    u+=L}
+   const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('aU',new T.Float32BufferAttribute(us,1));g.setAttribute('aSeed',new T.Float32BufferAttribute(seeds,1));
+   group.add(new T.Line(g,mat))}
+  sec.branch=branch;sec.mat=mat;
+ }
+}
+function streamlineUpdate(dt){const hi=density(45);
+ for(const sec of pipeSections){if(!sec.mat)continue;const b=branches[sec.branch],a=air[sec.branch],st=sec.stage;
+  const on=flowing&&(st==='common'||st==='header'||(!!b&&b.open))&&(st!=='safety'||venting(sec.branch));
+  const vel=!on?0:st==='common'?Math.max(HEADER_SHOW,air.mTotal/(hi*1.96e-4)):st==='header'?Math.max(HEADER_SHOW,b.open?a.v.header:0):(['gauge','stub'].includes(st)?0:(a.v[st]||0));
+  const idx=STAGE_ORDER[st]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[sec.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front));
+  const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
+  const sp=['common','header','hp'].includes(st)?SUPPLY:st==='auto'?autoOut(sec.branch):b&&handActive(sec.branch)?b.value:autoOut(sec.branch);
+  u.uColor.value.set(st==='safety'?'#46c8ff':sp>=10?'#3b78ff':sp>=.3?'#2fb4ff':'#4fe2ff')}
+}
 function clearPipes(list,oldMaterial){
  model3d.traverse(n=>{if(n.isMesh&&n.material===oldMaterial)n.visible=false});
- // front faces with depth writes: where tubes and joint spheres overlap, the clear wall is drawn once, not stacked
- const mat=new T.MeshPhysicalMaterial({color:'#d3e3e7',transparent:true,opacity:.34,roughness:.04,metalness:0,clearcoat:1,clearcoatRoughness:.03,side:T.FrontSide,depthWrite:true});
+ // Glass: a faint clear body plus an additive reflection layer, so highlights and bright rims stay at full
+ // strength instead of being dimmed by the body's transparency. Front faces with depth writes: where tubes and
+ // joint spheres overlap, the wall is drawn once, not stacked.
+ const env=glassEnvironment(),steel=new T.MeshStandardMaterial({color:'#c4cbd0',metalness:.95,roughness:.28,envMap:env,envMapIntensity:1.2}),bolt=new T.MeshStandardMaterial({color:'#8f979c',metalness:.9,roughness:.35,envMap:env});
+ const mat=new T.MeshPhysicalMaterial({color:'#c9dde2',transparent:true,opacity:.18,roughness:.02,metalness:0,side:T.FrontSide,depthWrite:true});
+ const shine=new T.MeshPhysicalMaterial({color:'#000000',roughness:.02,metalness:0,envMap:env,envMapIntensity:1.1,transparent:true,blending:T.AdditiveBlending,depthWrite:false,side:T.FrontSide});
  const best={};
  for(const p of list){if(['release','battery'].includes(p.kind))continue;const key=p.branch+':'+p.stage;
   let run=[p.frames[0]],runs=[run];for(let i=1;i<p.frames.length;i++){const a=p.frames[i-1],b=p.frames[i];if(Math.hypot(b[0]-a[0],b[1]-a[1],b[2]-a[2])<25)run.push(b);else runs.push(run=[b])}
   for(const r of runs){const len=r.reduce((s,q,i)=>i?s+Math.hypot(q[0]-r[i-1][0],q[1]-r[i-1][1],q[2]-r[i-1][2]):0,0);if(!best[key]||len>best[key].len)best[key]={len,r,stage:p.stage}}}
- const group=new T.Group();group.name='CLEAR LARGE PIPES';scene.add(group);
+ const group=new T.Group();group.name='CLEAR LARGE PIPES';group.renderOrder=5;scene.add(group);
  for(const {r,stage} of Object.values(best)){if(r.length<2)continue;
   const rad=(stage==='gauge'?PIPE_R.gauge:stage==='stub'?PIPE_R.stub:PIPE_R.main)*PIPE_SCALE;
   // keep corners, drop points that continue straight on
   const pts=[new T.Vector3(...r[0])];for(let i=1;i<r.length-1;i++){const a=new T.Vector3(...r[i-1]),b=new T.Vector3(...r[i]),c=new T.Vector3(...r[i+1]);if(b.clone().sub(a).normalize().dot(c.clone().sub(b).normalize())<.995)pts.push(b)}pts.push(new T.Vector3(...r[r.length-1]));
   const path=new T.CurvePath();for(let i=1;i<pts.length;i++)path.add(new T.LineCurve3(pts[i-1],pts[i]));
-  group.add(new T.Mesh(new T.TubeGeometry(path,Math.max(8,pts.length*6),rad,24,false),mat));
-  for(const q of pts){const j=new T.Mesh(new T.SphereGeometry(rad,24,14),mat);j.position.copy(q);group.add(j)}
+  pipeSections.push({key:Object.keys(best).find(k=>best[k].r===r),stage,pts,rad});
+  const tube=new T.TubeGeometry(path,Math.max(8,pts.length*6),rad,32,false),ball=new T.SphereGeometry(rad,32,16);
+  group.add(new T.Mesh(tube,mat),new T.Mesh(tube,shine));
+  for(const q of pts)for(const m of [mat,shine]){const j=new T.Mesh(ball,m);j.position.copy(q);group.add(j)}
+  for(const [q,o] of [[pts[0],pts[1]],[pts[pts.length-1],pts[pts.length-2]]])flange(q,o,rad);
  }
+ buildStreamlines();
+ // Bolted steel flange at a pipe end q (o: the next point inward), set back slightly into the pipe; one per joint.
+ function flange(q,o,rad){if(flangesAt.some(p=>p.distanceTo(q)<rad))return;flangesAt.push(q.clone());
+  const d=o.clone().sub(q).normalize(),f=new T.Group();f.position.copy(q).addScaledVector(d,rad*.35);f.quaternion.setFromUnitVectors(new T.Vector3(0,1,0),d);group.add(f);
+  const ring=new T.Mesh(new T.CylinderGeometry(rad*1.5,rad*1.5,rad*.32,40),steel);f.add(ring);
+  for(let k=0;k<6;k++){const a=k/6*Math.PI*2,b=new T.Mesh(new T.CylinderGeometry(rad*.13,rad*.13,rad*.5,12),bolt);b.position.set(Math.cos(a)*rad*1.24,0,Math.sin(a)*rad*1.24);f.add(b)}}
 }
-function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const m=new T.Matrix4(),v=new T.Vector3(),w=new T.Vector3(),q=new T.Quaternion(),sc=new T.Vector3(),hi=density(45);
+const flangesAt=[];
+// Air inside the pipes is drawn as white vapour: overlapping translucent puffs that fill the glass tubes and drift
+// at the section's calculated speed, faintly tinted by pressure. Released air fills the pipes as a travelling front:
+// the shared header first, then each open branch section by section (inlet → reducers → filter → manifold →
+// hoses / gauge / safety); closing a branch drains it back the same way.
+// After Start the supply header always shows air moving in from the inlet up to the shut-off valves, even while
+// they are closed (display speed only; the panel still reports the calculated flow).
+const HEADER_SHOW=.05;
+const FILL_RATE=2.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
+const fill={common:0,port:0,stbd:0};
+function createPipeFog(count){
+ const geo=new T.BufferGeometry(),pos=new Float32Array(count*3),col=new Float32Array(count*3),size=new Float32Array(count),alpha=new Float32Array(count);
+ geo.setAttribute('position',new T.BufferAttribute(pos,3));geo.setAttribute('color',new T.BufferAttribute(col,3));geo.setAttribute('aSize',new T.BufferAttribute(size,1));geo.setAttribute('aAlpha',new T.BufferAttribute(alpha,1));
+ const mat=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,vertexColors:true,uniforms:{uScale:{value:1}},
+  vertexShader:'attribute float aSize;attribute float aAlpha;varying float vA;varying vec3 vC;uniform float uScale;void main(){vA=aAlpha;vC=color;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*uScale;}',
+  fragmentShader:'varying float vA;varying vec3 vC;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float a=pow(1.-r,1.7)*vA;if(a<.004)discard;gl_FragColor=vec4(mix(vC,vec3(.55,.9,1.),.5)*a*.8,a);}'});
+ const points=new T.Points(geo,mat);points.frustumCulled=false;points.renderOrder=4;   // drawn before the clear tubes (5), behind their walls
+ return {points,geo,mat,pos,col,size,alpha};
+}
+function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const v=new T.Vector3(),w=new T.Vector3(),c=new T.Color(),hi=density(45),F=nativeAir;
+ // fill fronts: advance while air is admitted, drain twice as fast when it is shut off
+ const step=(k,on)=>{fill[k]=on?fill[k]+dt*FILL_RATE:Math.max(0,fill[k]-dt*FILL_RATE*2)};
+ step('common',flowing);for(const side of ['port','stbd'])step(side,flowing&&branches[side].open&&fill.common>=2);
+ F.mat.uniforms.uScale.value=renderer.domElement.height/(camera.top-camera.bottom);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
   const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
-  const vel=!pressurised?0:p.stage==='common'?air.mTotal/(hi*1.96e-4):p.stage==='header'?(b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
+  const vel=!pressurised?0:p.stage==='common'?Math.max(HEADER_SHOW,air.mTotal/(hi*1.96e-4)):p.stage==='header'?Math.max(HEADER_SHOW,b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
   p.ph+=dt*10*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
-  sc.setScalar(pressurised?Math.max(p.radius,2.4):0);nativeAir.setMatrixAt(i,m.compose(v,q,sc));
+  // how far the released air has reached this section, and whether this puff is behind the front
+  const idx=STAGE_ORDER[p.stage]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[p.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front)),filled=reach>=1||(f/n)<=reach;
+  F.pos[i*3]=v.x;F.pos[i*3+1]=v.y;F.pos[i*3+2]=v.z;
+  F.size[i]=(p.stage==='gauge'?2.2:p.stage==='stub'?2.6:1)*Math.max(p.radius,2.4)*(11+3*Math.sin(i*1.7+p.ph*.9));   // overlapping, gently breathing puffs
+  F.alpha[i]=pressurised&&filled?(p.stage==='safety'?.5:.26)*Math.min(1,reach*1.5+.2):0;
   const sp=!b||['common','header','hp'].includes(p.stage)?SUPPLY:p.stage==='auto'?autoOut(p.branch):handActive(p.branch)?b.value:autoOut(p.branch);
-  nativeAir.setColorAt(i,p.stage==='safety'?STAGE_COLOR.relief:sp>=10?STAGE_COLOR.hi:sp>=.3?STAGE_COLOR.mid:STAGE_COLOR.lo)}
- nativeAir.instanceMatrix.needsUpdate=true;if(nativeAir.instanceColor)nativeAir.instanceColor.needsUpdate=true;plumeUpdate(dt);lidVapourUpdate(dt);airReadout()}
+  c.copy(p.stage==='safety'?STAGE_COLOR.relief:sp>=10?STAGE_COLOR.hi:sp>=.3?STAGE_COLOR.mid:STAGE_COLOR.lo);F.col[i*3]=c.r;F.col[i*3+1]=c.g;F.col[i*3+2]=c.b}
+ for(const k of ['position','color','aSize','aAlpha'])F.geo.attributes[k].needsUpdate=true;streamlineUpdate(dt);plumeUpdate(dt);lidVapourUpdate(dt);airReadout()}
 // Live airflow numbers for the panel (system overview and pipes), refreshed a few times a second.
 let readoutAt=0;
 const gpm=kgs=>(kgs*60000).toFixed(kgs*60000<10?3:1)+' g/min';
@@ -201,7 +284,7 @@ if(webglAvailable)Promise.all([new GLTFLoader().loadAsync('assets/assembled-batt
  for(const node of needleNodes){const side=node.userData.touch_needle,c=node.userData.touch_center,pivot=new T.Group();pivot.position.set(c[0],c[2],-c[1]);model.add(pivot);scene.updateMatrixWorld(true);pivot.attach(node);pivot.userData.nativeBaseline=-(.145/.4)*Math.PI*1.5+Math.PI*.75;needles[side]=pivot;const cv=document.createElement('canvas');cv.width=cv.height=512;dialFace(cv.getContext('2d'),512);const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;tex.anisotropy=4;const face=new T.Mesh(new T.PlaneGeometry(.154,.154),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false,toneMapped:false}));face.rotation.x=-Math.PI/2;face.position.set(c[0],c[2]+.0028,-c[1]);face.renderOrder=2;model.add(face)}
  model.traverse(n=>{if(/gauge.?number|dial.?tick/i.test(n.name))n.visible=false});
  scene.updateMatrixWorld(true);model3d=model;buildPlume();rerouteBatteryHoses(air);autoReducerLamps();
- classifyAir(air);clearPipes(air.filter(p=>!p.src),pipeMaterial);nativeAirFrames=air;nativeAir=new T.InstancedMesh(new T.SphereGeometry(1,10,8),new T.MeshBasicMaterial({color:'#ffffff',toneMapped:false}),air.length);nativeAir.frustumCulled=false;nativeAir.instanceMatrix.setUsage(T.DynamicDrawUsage);for(let i=0;i<air.length;i++)nativeAir.setColorAt(i,new T.Color(air[i].kind==='release'?'#00a4d6':'#1a98e0'));scene.add(nativeAir);nativeAirUpdate(0);ground.visible=false;actualModelReady=true;loading.remove();renderer.render(scene,camera);
+ classifyAir(air);clearPipes(air.filter(p=>!p.src),pipeMaterial);nativeAirFrames=air;nativeAir=createPipeFog(air.length);scene.add(nativeAir.points);nativeAirUpdate(0);ground.visible=false;actualModelReady=true;loading.remove();renderer.render(scene,camera);
 }).catch(error=>{loading.remove();const e=document.querySelector('#error');e.hidden=false;e.textContent='The assembled 3D model could not load. Please reload.';console.error(error)});
 
 const integratedBatteries=[];

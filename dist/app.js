@@ -6,7 +6,7 @@ import * as T from 'three';
 import {AirflowNetwork} from './airflow3d.js';
 import {GLTFLoader} from './assets/loaders/GLTFLoader.js';
 const host=document.querySelector('#viewport'),labelsRoot=document.querySelector('#labels'),circuit=document.querySelector('#circuit');
-const scene=new T.Scene();scene.background=new T.Color('#22282b');
+const scene=new T.Scene();scene.background=new T.Color('#e9eef0');
 const camera=new T.OrthographicCamera(-950,950,800,-800,1,10000);camera.position.set(0,3000,0);camera.up.set(0,0,-1);camera.lookAt(0,0,0);
 let renderer,webglAvailable=true;try{if(new URLSearchParams(location.search).get('static')==='1')throw new Error('Static display requested');renderer=new T.WebGLRenderer({antialias:true,preserveDrawingBuffer:true})}catch{webglAvailable=false;const image=document.createElement('img');image.src='assets/assembled-top-view.jpg';image.alt='Assembled 3D battery agitation circuit, fixed top view';image.className='static-render';renderer={domElement:image,shadowMap:{},setPixelRatio(){},setSize(){},render(){}};document.body.classList.add('static-mode');document.querySelector('#flow-status').textContent='STATIC 3D VIEW';document.querySelector('#air').disabled=true;document.querySelector('#labels-toggle').disabled=true}renderer.setPixelRatio(sharpRatio());renderer.outputColorSpace=T.SRGBColorSpace;renderer.shadowMap.enabled=true;renderer.shadowMap.type=T.PCFSoftShadowMap;host.append(renderer.domElement);
 scene.add(new T.HemisphereLight(0xffffff,0x9ab7a3,2.5));const sun=new T.DirectionalLight(0xffffff,3);sun.position.set(-500,1600,-700);sun.castShadow=true;sun.shadow.mapSize.set(2048,2048);Object.assign(sun.shadow.camera,{left:-1100,right:1100,top:900,bottom:-900,near:1,far:4000});sun.shadow.bias=-.0002;scene.add(sun);
@@ -21,7 +21,7 @@ const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opa
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
 // Dark studio look for the circuit (as in the reference rendering): dark backdrop, light drawing labels.
-{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}aside#inspector{display:none!important}main{grid-template-columns:minmax(0,1fr)!important}html body #controls-toggle{display:none!important}header{position:relative}.header-title{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;font-size:clamp(17px,2.2vw,32px);font-weight:700;letter-spacing:.3px;color:#1f3a33;white-space:nowrap;pointer-events:none}@media(max-width:520px){.header-title{left:16px;transform:translateY(-50%);font-size:16px}}.part-button,.part-button:hover,.part-button.selected,.part-button:focus{box-shadow:none!important;background:transparent!important;outline:none!important}#view-top,#view-front,#fullscreen{display:none!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
+{const st=document.createElement('style');st.textContent='#circuit{background:#e9eef0}#circuit .drawing-label{color:#1f3a33}#circuit .drawing-label small{color:#4d6168}#circuit .drawing-label.muted{color:#6b7a80}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}aside#inspector{display:none!important}main{grid-template-columns:minmax(0,1fr)!important}html body #controls-toggle{display:none!important}header{position:relative}.header-title{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);margin:0;font-size:clamp(17px,2.2vw,32px);font-weight:700;letter-spacing:.3px;color:#1f3a33;white-space:nowrap;pointer-events:none}@media(max-width:520px){.header-title{left:16px;transform:translateY(-50%);font-size:16px}}.part-button,.part-button:hover,.part-button.selected,.part-button:focus{box-shadow:none!important;background:transparent!important;outline:none!important}#view-top,#view-front,#fullscreen{display:none!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
 const branches={port:{open:false,auto:false,hand:false,filter:false,value:.145,wheel:0},stbd:{open:false,auto:false,hand:false,filter:false,value:.145,wheel:0}};
 // Every part starts OFF; after Start each is switched ON by hand (shut-off first). Pause/Reset turn them all OFF.
 const allOff=side=>Object.assign(branches[side],{auto:false,hand:false,filter:false});
@@ -116,7 +116,8 @@ const WHEEL_SHUT=Math.PI/4,WHEEL_OPEN=-4*Math.PI,WHEEL_SPEED=3*Math.PI;   // shu
 const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(w)w.userData.target=branches[side].open?WHEEL_OPEN:WHEEL_SHUT};
 // Auto reducer status colour: its square V cap is green while the auto reducer is ON (reducing) and red when it is
 // OFF (bypassed); double-click to switch. The colour fades between states and pulses while air is passing through.
-const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33'),LAMP_IDLE=new T.Color('#eef2f3');
+const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33'),LAMP_IDLE=new T.Color('#8e9ca3');   // light backdrop: idle in grey so it still shows
+
 function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _](?:square[ _]symbol[ _]cap[ _](v|x)|diamond[ _]filter[ _]top)/i.exec(n.name);if(!m||!n.isMesh)return;
  n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(!m[2]?filterLamps:m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,col:LAMP_IDLE.clone()}})}
 // Air filter diamond: green while its circuit is ON (Start + shut-off open), red while it is OFF.
@@ -199,10 +200,10 @@ const pipeSections=[],STREAMS_PER=22;
 function buildStreamlines(){
  const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=4;scene.add(group);
  for(const sec of pipeSections){
-  const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,
+  const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,
    uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#1593e6')}},
    vertexShader:'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,vec3(.9,.98,1.),head*.7)*a,a);}'});
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.55,head*.6),a);}'});
   // polyline length and a perpendicular frame per segment
   const P=sec.pts;let total=0;for(let i=1;i<P.length;i++)total+=P[i].distanceTo(P[i-1]);mat.uniforms.uLen.value=total;
   for(let k=0;k<STREAMS_PER;k++){
@@ -224,7 +225,7 @@ function streamlineUpdate(dt){const hi=density(45);
   const idx=STAGE_ORDER[st]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[sec.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front));
   const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
   const sp=['common','header','hp'].includes(st)?SUPPLY:st==='auto'?autoOut(sec.branch):b&&handActive(sec.branch)?b.value:autoOut(sec.branch);
-  u.uColor.value.set(st==='safety'?'#46c8ff':sp>=10?'#3b78ff':sp>=.3?'#2fb4ff':'#4fe2ff')}
+  u.uColor.value.set(st==='safety'?'#1a8fc4':sp>=10?'#2457d6':sp>=.3?'#1f86d1':'#1aa3c4')}
 }
 function clearPipes(list,oldMaterial){
  model3d.traverse(n=>{if(n.isMesh&&n.material===oldMaterial)n.visible=false});
@@ -232,7 +233,7 @@ function clearPipes(list,oldMaterial){
  // strength instead of being dimmed by the body's transparency. Front faces with depth writes: where tubes and
  // joint spheres overlap, the wall is drawn once, not stacked.
  const env=glassEnvironment(),steel=new T.MeshStandardMaterial({color:'#c4cbd0',metalness:.95,roughness:.28,envMap:env,envMapIntensity:1.2}),bolt=new T.MeshStandardMaterial({color:'#8f979c',metalness:.9,roughness:.35,envMap:env});
- const mat=new T.MeshPhysicalMaterial({color:'#c9dde2',transparent:true,opacity:.18,roughness:.02,metalness:0,side:T.FrontSide,depthWrite:true});
+ const mat=new T.MeshPhysicalMaterial({color:'#8fb3c6',transparent:true,opacity:.3,roughness:.02,metalness:0,side:T.FrontSide,depthWrite:true});
  const shine=new T.MeshPhysicalMaterial({color:'#000000',roughness:.02,metalness:0,envMap:env,envMapIntensity:1.1,transparent:true,blending:T.AdditiveBlending,depthWrite:false,side:T.FrontSide});
  const best={};
  for(const p of list){if(['release','battery'].includes(p.kind))continue;const key=p.branch+':'+p.stage;
@@ -270,9 +271,9 @@ const fill={common:0,port:0,stbd:0};
 function createPipeFog(count){
  const geo=new T.BufferGeometry(),pos=new Float32Array(count*3),col=new Float32Array(count*3),size=new Float32Array(count),alpha=new Float32Array(count);
  geo.setAttribute('position',new T.BufferAttribute(pos,3));geo.setAttribute('color',new T.BufferAttribute(col,3));geo.setAttribute('aSize',new T.BufferAttribute(size,1));geo.setAttribute('aAlpha',new T.BufferAttribute(alpha,1));
- const mat=new T.ShaderMaterial({transparent:true,depthWrite:false,blending:T.AdditiveBlending,vertexColors:true,uniforms:{uScale:{value:1}},
+ const mat=new T.ShaderMaterial({transparent:true,depthWrite:false,vertexColors:true,uniforms:{uScale:{value:1}},
   vertexShader:'attribute float aSize;attribute float aAlpha;varying float vA;varying vec3 vC;uniform float uScale;void main(){vA=aAlpha;vC=color;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*uScale;}',
-  fragmentShader:'varying float vA;varying vec3 vC;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float a=pow(1.-r,1.7)*vA;if(a<.004)discard;gl_FragColor=vec4(mix(vC,vec3(.55,.9,1.),.5)*a*.8,a);}'});
+  fragmentShader:'varying float vA;varying vec3 vC;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float a=pow(1.-r,1.7)*vA;if(a<.004)discard;gl_FragColor=vec4(mix(vC,vec3(.16,.42,.62),.45),a*.8);}'});
  const points=new T.Points(geo,mat);points.frustumCulled=false;points.renderOrder=4;   // drawn before the clear tubes (5), behind their walls
  return {points,geo,mat,pos,col,size,alpha};
 }

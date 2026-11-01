@@ -213,7 +213,7 @@ export function createVapour(count = 700) {
   geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('aAlpha', new THREE.BufferAttribute(al, 1)); geo.setAttribute('aSize', new THREE.BufferAttribute(sz, 1));
   const mat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uScale: { value: 400 }, uPersp: { value: 1 } },
     vertexShader: 'attribute float aAlpha;attribute float aSize;varying float vAl;uniform float uScale;uniform float uPersp;void main(){vAl=aAlpha;vec4 mv=modelViewMatrix*vec4(position,1.);gl_Position=projectionMatrix*mv;gl_PointSize=aSize*uScale/mix(1.,-mv.z,uPersp);}',
-    fragmentShader: 'varying float vAl;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float a=pow(1.-r,1.6)*vAl;if(a<.004)discard;gl_FragColor=vec4(mix(vec3(1.),vec3(.78,.82,.86),r*r),a);}' });
+    fragmentShader: 'varying float vAl;void main(){float r=length(gl_PointCoord-.5)*2.;if(r>1.)discard;float a=pow(1.-r,1.6)*vAl;if(a<.004)discard;gl_FragColor=vec4(mix(vec3(.62,.72,.8),vec3(.45,.56,.66),r*r),a);}' });
   const points = new THREE.Points(geo, mat); points.frustumCulled = false; points.renderOrder = 6;
   const parts = Array.from({ length: count }, () => ({ age: Math.random(), life: 1.2 + Math.random() * 0.8, live: false }));
   function update(dt, level, vent, uScale, perspective) {

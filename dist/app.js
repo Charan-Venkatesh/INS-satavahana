@@ -109,11 +109,13 @@ const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWhee
 // Auto reducer status colour: its square V cap is green while the auto reducer is ON (reducing) and red when it is
 // OFF (bypassed); double-click to switch. The colour fades between states and pulses while air is passing through.
 const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33');
-function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _]square[ _]symbol[ _]cap[ _](v|x)/i.exec(n.name);if(!m||!n.isMesh)return;
- n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,mix:0}})}
+function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _](?:square[ _]symbol[ _]cap[ _](v|x)|diamond[ _]filter[ _]top)/i.exec(n.name);if(!m||!n.isMesh)return;
+ n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(!m[2]?filterLamps:m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,mix:0}})}
+// Air filter diamond: green while its circuit is ON (Start + shut-off open), red while it is OFF.
+const filterLamps={};
 // Hand reducer X cap: green while ON (in line), red when OFF (bypassed) or its circuit is off; pulses while air passes.
 const handLamps={};
-function lampUpdate(dt){const t=performance.now()/1000,c=new T.Color();for(const [lamps,key] of [[autoLamps,'auto'],[handLamps,'hand']])for(const side in lamps){const l=lamps[side],on=branches[side][key]&&circuitOn(side),live=circuitOn(side)&&(key==='auto'||handActive(side));
+function lampUpdate(dt){const t=performance.now()/1000,c=new T.Color();for(const [lamps,key] of [[autoLamps,'auto'],[handLamps,'hand'],[filterLamps,'filter']])for(const side in lamps){const l=lamps[side],on=(key==='filter'||branches[side][key])&&circuitOn(side),live=circuitOn(side)&&(key==='auto'||handActive(side));
  l.mix+=((on?1:0)-l.mix)*Math.min(1,dt*5);c.copy(LAMP_OFF).lerp(LAMP_ON,l.mix);l.mesh.material.color.copy(c);
  if(l.mesh.material.emissive){l.mesh.material.emissive.copy(c);l.mesh.material.emissiveIntensity=.25+(live?.35*(.5+.5*Math.sin(t*4)):0)}}}
 function wheelUpdate(dt){lampUpdate(dt);for(const side in teeHandles){const t=teeHandles[side],d=(branches[side].hand?TEE_ON:0)-t.rotation.y,s=TEE_SPEED*dt;t.rotation.y+=Math.abs(d)<=s?d:Math.sign(d)*s}for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w||w.userData.target==null)continue;

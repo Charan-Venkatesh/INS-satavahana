@@ -65,7 +65,7 @@ self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key
 self.addEventListener('message',event=>{if(event.data?.type==='CHECK_OFFLINE')event.source?.postMessage({type:'OFFLINE_READY'})});
 self.addEventListener('fetch',event=>{const request=event.request,url=new URL(request.url);if(request.method!=='GET'||url.origin!==self.location.origin||url.pathname.includes('/offline/'))return;
  if(request.mode==='navigate'){const page=url.pathname.endsWith('ventilation.html')?'./ventilation.html':'./';event.respondWith((async()=>{try{const response=await fetch(request);if(response.ok&&(response.headers.get('content-type')||'').includes('text/html')){const text=await response.clone().text();if(text.includes('bundle.js')||text.includes('app.js'))(await caches.open(CACHE)).put(page,response.clone())}return response}catch{return(await caches.open(CACHE)).match(page)}})());return}
- event.respondWith((async()=>{const cache=await caches.open(CACHE),cached=await cache.match(request,{ignoreSearch:true});return cached||fetch(request)})())});
+ event.respondWith((async()=>{const cache=await caches.open(CACHE);try{const response=await fetch(request);if(response.ok)cache.put(request,response.clone());return response}catch{return(await cache.match(request,{ignoreSearch:true}))||Response.error()}})())});   // network first: online always gets fresh files, offline uses the saved copy
 '''.replace('__VERSION__',json.dumps(version)).replace('__CORE__',json.dumps(core))
 (dist/'sw.js').write_text(sw)
 manifest={'offline_file':str(output),'bytes':output.stat().st_size,'embedded_assets':embedded,'service_worker_cache':version,'cached_assets':len(core),'no_external_runtime_dependencies':True}

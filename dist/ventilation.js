@@ -155,6 +155,11 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
     const mid = path.getPointAt(.5), t = path.getTangentAt(.5);
     chevron.rotation.order = 'YXZ'; chevron.rotation.set(-Math.PI / 2, Math.atan2(-t.z, t.x), 0); chevron.position.copy(mid).add(new T.Vector3(0, r + 4, 0)); chevron.renderOrder = 7; scene.add(chevron);
   }
+  const coreMat = new T.ShaderMaterial({ transparent: true, depthWrite: false,
+    uniforms: { uColor: { value: AIR[air].clone() }, uAlpha: { value: 0 }, uReach: { value: 0 }, uPhase: { value: Math.random() }, uLen: { value: len } },
+    vertexShader: 'varying float vU;void main(){vU=uv.x;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+    fragmentShader: 'uniform vec3 uColor;uniform float uAlpha;uniform float uReach;uniform float uPhase;uniform float uLen;varying float vU;void main(){if(vU>uReach)discard;float x=fract(vU*uLen/46.-uPhase);float pulse=smoothstep(0.,.18,x)*(1.-smoothstep(.45,.7,x));float a=uAlpha*(.28+.5*pulse);gl_FragColor=vec4(uColor*(1.-.35*pulse),a);}' });
+  const core = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r * .62, 12, false), coreMat); core.renderOrder = 4; scene.add(core);
   const N = Math.max(8, Math.round(len / 4)), lut = path.getSpacedPoints(N - 1), nb = Math.max(3, Math.round(len / (r > 9 ? 16 : 22)));
   const bpos = new Float32Array(nb * 3), bal = new Float32Array(nb), bsz = new Float32Array(nb), bgeo = new T.BufferGeometry();
   bgeo.setAttribute('position', new T.BufferAttribute(bpos, 3).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aAlpha', new T.BufferAttribute(bal, 1).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aSize', new T.BufferAttribute(bsz, 1));
@@ -170,7 +175,7 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
     vertexShader: 'attribute float aAlpha;attribute float aSize;uniform float uScale;varying float vA;void main(){vA=aAlpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*uScale;}',
     fragmentShader: 'uniform float uAlpha;varying float vA;void main(){float d=length(gl_PointCoord-.5)*2.;if(d>1.)discard;vec3 col=mix(vec3(1.),vec3(.55,.62,.68),smoothstep(.55,1.,d));float a=(1.-smoothstep(.75,1.,d))*vA*uAlpha;if(a<.01)discard;gl_FragColor=vec4(col,a);}' });
   const spts = new T.Points(sgeo, smat); spts.frustumCulled = false; spts.renderOrder = 5; scene.add(spts);
-  const p = { from, to, key, air, path, len, mat: m, streams, chevron, fill: 0, show: 0, reached: false, lut, N, bubbles, bpos, bal, bgeo, bmat, bpts, snow, spos, sal, sgeo, smat, spts };
+  const p = { from, to, key, air, path, len, mat: m, streams, chevron, fill: 0, show: 0, reached: false, lut, N, bubbles, bpos, bal, bgeo, bmat, bpts, snow, spos, sal, sgeo, smat, spts, core, coreMat };
   pipes.push(p); return p;
 }
 function pipeUpdate(p, dt, q, color, px, now) {
@@ -180,6 +185,8 @@ function pipeUpdate(p, dt, q, color, px, now) {
   const u = p.mat.uniforms; u.uAlpha.value = p.show; u.uReach.value = p.fill; u.uColor.value.copy(color);
   u.uPhase.value += dt * (flowing ? .2 + 1 * Math.min(1.5, q / 600) : 0);
   p.streams.visible = p.show > .01;
+  const cu = p.coreMat.uniforms; cu.uAlpha.value = p.show; cu.uReach.value = p.fill; cu.uColor.value.copy(color); p.core.visible = p.streams.visible;
+  cu.uPhase.value += dt * (flowing ? .25 + 1.1 * Math.min(1.5, q / 600) : 0);       // pulses travel with the flow; still when blocked
   // bubbles ride the flow; where the air is blocked they drift slowly up to the closed part
   const b = p.bmat.uniforms; b.uAlpha.value = p.show; b.uScale.value = px; b.uColor.value.copy(color); p.bpts.visible = p.streams.visible;
   if (p.bpts.visible) {
@@ -294,7 +301,7 @@ function blower(id, x, y, width, title, connect) {
     const top = new T.Box3().setFromObject(turn).max.y + 14;           // suction runs over the motor, then drops into the eye
     connect(plan(f), plan(f.clone().addScaledVector(axis, 28)), top);
     layout();
-  });
+  }).catch(e => { console.error('Blower model failed', e); const w = document.querySelector('#vent-warning'); if (w) { w.textContent = '⚠ Blower model did not load: ' + (e?.message || e); w.className = ''; w.style.opacity = '1'; } });
   return p;
 }
 // H₂ burner: a steel box with a smoked-glass top, so the fire inside shows from above. A row of nozzles on the burner

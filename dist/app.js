@@ -112,10 +112,7 @@ const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWhee
 // OFF (bypassed); double-click to switch. The colour fades between states and pulses while air is passing through.
 const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33'),LAMP_IDLE=new T.Color('#eef2f3');
 function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _](?:square[ _]symbol[ _]cap[ _](v|x)|diamond[ _]filter[ _]top)/i.exec(n.name);if(!m||!n.isMesh)return;
- n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(!m[2]?filterLamps:m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,col:LAMP_IDLE.clone()}});
- // shut-off handwheel follows the same three colours
- for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w)continue;const meshes=[];w.traverse(m=>{if(m.isMesh){m.material=m.material.clone();meshes.push(m)}});shutLamps[side]={meshes,col:LAMP_IDLE.clone()}}}
-const shutLamps={};
+ n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(!m[2]?filterLamps:m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,col:LAMP_IDLE.clone()}})}
 // Air filter diamond: green while its circuit is ON (Start + shut-off open), red while it is OFF.
 const filterLamps={};
 // Hand reducer X cap: green while ON (in line), red when OFF (bypassed) or its circuit is off; pulses while air passes.
@@ -124,8 +121,7 @@ function lampUpdate(dt){const t=performance.now()/1000,k=Math.min(1,dt*5),target
  for(const [lamps,key] of [[autoLamps,'auto'],[handLamps,'hand'],[filterLamps,'filter']])for(const side in lamps){const l=lamps[side],on=branches[side][key],ready=circuitOn(side);
   l.col.lerp(target(on,ready),k);l.mesh.material.color.copy(l.col);
   if(l.mesh.material.emissive){l.mesh.material.emissive.copy(l.col);l.mesh.material.emissiveIntensity=!flowing?.05:.25+(on&&ready?.35*(.5+.5*Math.sin(t*4)):0)}}
- for(const side in shutLamps){const l=shutLamps[side];l.col.lerp(target(branches[side].open,flowing),k);for(const m of l.meshes){m.material.color.copy(l.col);if(m.material.emissive){m.material.emissive.copy(l.col);m.material.emissiveIntensity=flowing?.2:.03}}}
-}
+ }
 function wheelUpdate(dt){lampUpdate(dt);for(const side in teeHandles){const t=teeHandles[side],d=(branches[side].hand?TEE_ON:0)-t.rotation.y,s=TEE_SPEED*dt;t.rotation.y+=Math.abs(d)<=s?d:Math.sign(d)*s}for(const side of ['port','stbd']){const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(!w||w.userData.target==null)continue;
  const d=w.userData.target-w.rotation.y,step=WHEEL_SPEED*dt;w.rotation.y+=Math.abs(d)<=step?d:Math.sign(d)*step}}
 // Battery detail starts at this branch's PG reading, or the hand reducer setting when no air is flowing.
@@ -133,7 +129,7 @@ const openBattery=side=>openBatteryDetail({side,pressure:pgValue(side)||(branche
 // As requested, both safety valves vent whenever their branch has air (Start + shut-off open), at any line pressure.
 const venting=side=>flowing&&passes(side);
 function action(a){if(a==='toggleair'){document.querySelector('#air').click();return}if(!selected)return;const p=parts.get(selected),b=branches[p.side];if(a==='battery3d'){openBattery(p.side);return}if(a==='open'&&!flowing){circuitWarning(p.side,true);details();return}   // FR-SI-01: no opening while the circuit is OFF
- if(a==='open'||a==='close'){b.open=a==='open';turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.hand=a==='handon'}if(a==='autoon'||a==='autooff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.auto=a==='autoon'}if(a==='filteron'||a==='filteroff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.filter=a==='filteron'}if(a==='increase'||a==='decrease'){if(!b.hand){details();return}const sign=a==='increase'?1:-1;const next=Math.min(.160,Math.max(.130,Math.round((b.value+sign*.005)*1000)/1000));if(next!==b.value){b.value=next;b.wheel+=sign*Math.PI/3}}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
+ if(a==='open'||a==='close'){b.open=a==='open';b.auto=b.filter=b.open;turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.hand=a==='handon'}if(a==='autoon'||a==='autooff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.auto=a==='autoon'}if(a==='filteron'||a==='filteroff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.filter=a==='filteron'}if(a==='increase'||a==='decrease'){if(!b.hand){details();return}const sign=a==='increase'?1:-1;const next=Math.min(.160,Math.max(.130,Math.round((b.value+sign*.005)*1000)/1000));if(next!==b.value){b.value=next;b.wheel+=sign*Math.PI/3}}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
 function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),over=v>DIAL_MAX,t=v.toFixed(3)+' kg/cm²'+(over?' · OVER RANGE':'');if(pgLabels[side]&&pgLabels[side].textContent!==t){pgLabels[side].textContent=t;pgLabels[side].style.color=over?'#c0392b':''}needles[side].rotation.y=-(Math.min(v,DIAL_MAX*1.04)/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
 function showRunState(){
  for(const id of ['#air','#start']){const button=document.querySelector(id);button.innerHTML=flowing?'<span>Ⅱ</span> Pause':'<span>▶</span> Start';button.setAttribute('aria-pressed',String(flowing));button.disabled=!webglAvailable}

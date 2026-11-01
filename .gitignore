@@ -4,3 +4,4 @@
 
 .openai/portable-bundle.js
 scripts/__pycache__/
+.openai/ventilation-bundle.js

@@ -234,9 +234,9 @@ export function createVapour(count = 700) {
 // Styles go in at load: the "i" buttons beside the batteries need them before the dialog is ever opened.
 { const style = document.createElement('style'); style.textContent = css; document.head.append(style); }
 
-export function openBatteryDetail({ side, pressure }) {
+export function openBatteryDetail({ side, pressure, title }) {
   if (!dlg) build();
-  dlg.querySelector('h2').textContent = 'Battery cell · ' + (side === 'stbd' ? 'STBD' : 'PORT') + ' — transparent with air bubbling';
+  dlg.querySelector('h2').textContent = title || 'Battery cell · ' + (side === 'stbd' ? 'STBD' : 'PORT') + ' — transparent with air bubbling';
   const sp = dlg.querySelector('#bd-sp');
   sp.value = String(Math.min(+sp.max, Math.max(+sp.min, pressure)));
   dlg.showModal();

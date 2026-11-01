@@ -4,6 +4,7 @@
 // Ported from the supplied Blower Viewer page; uses the app's bundled three.js (no CDN) and a small built-in orbit.
 import * as THREE from 'three';
 import {loadBlower, MAX_REV_PER_S} from './blower-model.js';
+import {loadPump, PUMP_REV_PER_S} from './pump-model.js';
 
 const css = `
 #blower-detail{width:min(1000px,96vw);max-width:96vw;max-height:94dvh;padding:16px;border:1px solid #c4d7c8;border-radius:16px;background:#f4f5f7;color:#222;font-family:system-ui,Arial,sans-serif}
@@ -29,12 +30,12 @@ const css = `
 { const style = document.createElement('style'); style.textContent = css; document.head.append(style); }
 
 let dlg, api;
-// open({ title, speed() → actual 0..1, running() → bool, flow() → m³/h, toggle() → warning text or '', setPoint, setSpeed(v) })
+// open({ title, speed() → actual 0..1, running() → bool, flow() → m³/h, toggle() → warning text or '', setPoint, setSpeed(v), kind: 'blower' | 'pump' })
 export function openBlowerDetail(opts) {
   if (!dlg) build();
-  dlg.querySelector('h2').textContent = opts.title + ' — cut-section view';
+  dlg.querySelector('h2').textContent = opts.title + (opts.kind === 'pump' ? ' — 3D view' : ' — cut-section view');
   dlg.querySelector('h3').textContent = opts.title;
-  api.source = opts; api.sync();
+  api.source = opts; api.show(opts.kind || 'blower'); api.sync();
   dlg.showModal();
   api.resize(); api.start();
 }
@@ -42,12 +43,12 @@ export function openBlowerDetail(opts) {
 function build() {
   dlg = document.createElement('dialog'); dlg.id = 'blower-detail';
   dlg.innerHTML = `<div class="bl-head"><h2></h2><button id="bl-close">Close ×</button></div>
-<div class="bl-stage"><div class="bl-panel"><h3></h3><div class="bl-sub">P-31 blower · cut-section model · drag to turn, pinch or scroll to zoom</div>
+<div class="bl-stage"><div class="bl-panel"><h3></h3><div class="bl-sub"></div>
 <button id="bl-power" type="button" aria-pressed="false"><span class="bl-led"></span><span id="bl-power-label">Power OFF</span></button>
 <div class="bl-row"><label for="bl-speed">Speed</label><input id="bl-speed" type="range" min="20" max="100" value="100"><span id="bl-speed-val">100%</span></div>
-<div class="bl-status"><span>Fan</span><b id="bl-state">Stopped</b></div><div class="bl-status"><span>Airflow</span><b id="bl-flow">0 m³/h</b></div><div class="bl-meter"><div id="bl-bar"></div></div>
+<div class="bl-status"><span id="bl-what">Fan</span><b id="bl-state">Stopped</b></div><div class="bl-status"><span id="bl-qname">Airflow</span><b id="bl-flow">0 m³/h</b></div><div class="bl-meter"><div id="bl-bar"></div></div>
 <label class="bl-check"><input id="bl-air" type="checkbox" checked> Show air</label><div class="bl-warn" id="bl-warn" role="alert"></div></div>
-<div class="bl-hint">Power and Speed run this blower on the circuit</div></div>`;
+<div class="bl-hint"></div></div>`;
   document.body.append(dlg);
   const stage = dlg.querySelector('.bl-stage');
   const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -91,14 +92,29 @@ function build() {
   // ---- model
   const OUTLET = { x0: 0.025, x1: 0.155, z0: -0.39, z1: -0.14, y: 0.722 };   // inner opening of the red flange
   const EYE = new THREE.Vector3(0.2, 0.345, 0);                              // impeller inlet eye centre
-  let rotor = null;
-  loadBlower().then(src => {
-    const model = src.clone(true);
-    model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
-    scene.add(model); rotor = model.getObjectByName('Rotor');
-    const out = model.getObjectByName('Air_Outlet'); if (out) OUTLET.y = out.position.y;
-    const inl = model.getObjectByName('Air_Inlet'); if (inl) EYE.copy(inl.position);
-  });
+  // both models are loaded once; the one for the opened part is shown
+  let rotor = null, kind = 'blower', rate = MAX_REV_PER_S;
+  const models = {}, KINDS = {
+    blower: { load: loadBlower, rotor: 'Rotor', rate: MAX_REV_PER_S, target: [-0.15, 0.38, -0.05], r: 2.2, sub: 'P-31 blower · cut-section model · drag to turn, pinch or scroll to zoom', what: 'Fan', q: 'Airflow', hint: 'Power and Speed run this blower on the circuit' },
+    pump: { load: loadPump, rotor: 'Shaft', rate: PUMP_REV_PER_S, target: [-0.1, 0.25, 0], r: 2.4, sub: 'Cooling-water pump set · Blender model · drag to turn, pinch or scroll to zoom', what: 'Pump', q: 'Water flow', hint: 'Power and Speed run this pump on the circuit' }
+  };
+  function show(k) {
+    kind = k; const K = KINDS[k]; rate = K.rate;
+    dlg.querySelector('.bl-sub').textContent = K.sub; dlg.querySelector('#bl-what').textContent = K.what; dlg.querySelector('#bl-qname').textContent = K.q; dlg.querySelector('.bl-hint').textContent = K.hint;
+    dlg.querySelector('.bl-check').style.display = k === 'blower' ? '' : 'none';
+    outPool.points.visible = inPool.points.visible = k === 'blower' && dlg.querySelector('#bl-air').checked;
+    target.set(...K.target); orbit.r = K.r; place();
+    for (const m of Object.values(models)) m.visible = false;
+    rotor = null;
+    const use = m => { m.visible = true; rotor = m.getObjectByName(K.rotor); };
+    if (models[k]) use(models[k]);
+    else K.load().then(src => {
+      const model = src.clone(true); model.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+      if (k === 'blower') { const out = model.getObjectByName('Air_Outlet'); if (out) OUTLET.y = out.position.y; const inl = model.getObjectByName('Air_Inlet'); if (inl) EYE.copy(inl.position); }
+      else model.position.y = 0.075;                                                  // baseplate sits on the grid
+      scene.add(model); models[k] = model; model.visible = false; if (kind === k) use(model);
+    });
+  }
 
   // ---- air particles (soft sprites; each pool reuses dead particles) — blue-grey so they read on the light backdrop
   function makePool(count, color) {
@@ -174,16 +190,16 @@ function build() {
     state: dlg.querySelector('#bl-state'), flow: dlg.querySelector('#bl-flow'), bar: dlg.querySelector('#bl-bar'), air: dlg.querySelector('#bl-air'), warn: dlg.querySelector('#bl-warn') };
   ui.power.addEventListener('click', () => { ui.warn.textContent = api.source.toggle() || ''; });
   ui.speed.addEventListener('input', () => { ui.speedVal.textContent = ui.speed.value + '%'; api.source.setSpeed(ui.speed.value / 100); });
-  ui.air.addEventListener('change', () => { outPool.points.visible = inPool.points.visible = ui.air.checked; });
+  ui.air.addEventListener('change', () => { outPool.points.visible = inPool.points.visible = ui.air.checked && kind === 'blower'; });
 
   let angle = 0, simTime = 0, last = 0, running = false;
   function frame(now) {
     if (!dlg.open) { running = false; return; }
     const dt = Math.min(0.05, Math.max(0, last ? (now - last) / 1000 : 0.016)); last = now; simTime += dt;
     const src = api.source, f = src.speed(), on = src.running();
-    angle += f * MAX_REV_PER_S * Math.PI * 2 * dt; if (rotor) rotor.rotation.x = angle;
+    angle += f * rate * Math.PI * 2 * dt; if (rotor) rotor.rotation.x = angle;
     stepOutlet(outPool, dt, simTime); stepInlet(inPool, dt, Math.max(f, 0.05));
-    if (f > 0.03) { emit(outPool, 1600 * f, dt, initOutlet(f)); emit(inPool, 650 * f, dt, initInlet(f)); }
+    if (f > 0.03 && kind === 'blower') { emit(outPool, 1600 * f, dt, initOutlet(f)); emit(inPool, 650 * f, dt, initInlet(f)); }
     flush(outPool); flush(inPool);
     ui.power.classList.toggle('on', on); ui.power.setAttribute('aria-pressed', String(on)); ui.label.textContent = on ? 'Power ON' : 'Power OFF';
     ui.state.textContent = f < 0.002 ? 'Stopped' : on && Math.abs(src.setPoint() - f) < 0.02 ? 'Running' : on ? 'Spinning up' : 'Coasting down';
@@ -192,7 +208,7 @@ function build() {
     requestAnimationFrame(frame);
   }
   dlg.querySelector('#bl-close').addEventListener('click', () => dlg.close());
-  api = { source: null, resize,
+  api = { source: null, resize, show,
     sync() { const v = Math.round(api.source.setPoint() * 100); ui.speed.value = String(v); ui.speedVal.textContent = v + '%'; ui.warn.textContent = ''; },
     start() { if (!running) { running = true; last = 0; requestAnimationFrame(frame); } } };
 }

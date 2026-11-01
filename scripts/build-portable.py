@@ -7,13 +7,16 @@ subprocess.run([args.esbuild,str(dist/'app.js'),'--bundle','--minify','--format=
 code=bundle.read_text();(dist/'app.bundle.js').write_text(code);bundle_name='app.'+hashlib.sha256(code.encode()).hexdigest()[:12]+'.bundle.js'
 for old in dist.glob('app.*.bundle.js'):old.unlink()
 (dist/bundle_name).write_text(code)
-# Screen 2 (ventilation) is online only: its own bundle, linked from the header of both screens.
-vbundle=root/'.openai'/'ventilation-bundle.js'
-subprocess.run([args.esbuild,str(dist/'ventilation.js'),'--bundle','--minify','--format=iife','--platform=browser','--target=es2020','--alias:three='+str(dist/'assets/three.module.js'),'--outfile='+str(vbundle)],check=True)
-vcode=vbundle.read_text();vname='ventilation.'+hashlib.sha256(vcode.encode()).hexdigest()[:12]+'.bundle.js'
-for old in dist.glob('ventilation.*.bundle.js'):old.unlink()
-(dist/vname).write_text(vcode)
-vhtml=re.sub(r'<script(?: type="module")? src="ventilation(?:\.[a-f0-9]+)?(?:\.bundle)?\.js"></script>','<script src="'+vname+'"></script>',(dist/'ventilation.html').read_text());(dist/'ventilation.html').write_text(vhtml)
+# Screens 2 (ventilation) and 3 (cooling) are online only: each has its own bundle, linked from the header of every screen.
+extra={}
+for page in ('ventilation','cooling'):
+ vb=root/'.openai'/(page+'-bundle.js')
+ subprocess.run([args.esbuild,str(dist/(page+'.js')),'--bundle','--minify','--format=iife','--platform=browser','--target=es2020','--alias:three='+str(dist/'assets/three.module.js'),'--outfile='+str(vb)],check=True)
+ vc=vb.read_text();vn=page+'.'+hashlib.sha256(vc.encode()).hexdigest()[:12]+'.bundle.js'
+ for old in dist.glob(page+'.*.bundle.js'):old.unlink()
+ (dist/vn).write_text(vc);extra[page]=vn
+ ph=re.sub(r'<script(?: type="module")? src="'+page+r'(?:\.[a-f0-9]+)?(?:\.bundle)?\.js"></script>','<script src="'+vn+'"></script>',(dist/(page+'.html')).read_text());(dist/(page+'.html')).write_text(ph)
+vname=extra['ventilation']
 html=(dist/'index.html').read_text();css=(dist/'style.css').read_text()
 paths=sorted(set(re.findall(r'assets/[A-Za-z0-9_.\-/]+',code+html)),key=len,reverse=True)
 embedded=[]
@@ -52,7 +55,7 @@ Interactive 3D requires a modern browser with WebGL. If unavailable, the supplie
 with zipfile.ZipFile(offline/'Battery-Agitation-Offline.zip','w',zipfile.ZIP_DEFLATED) as z:
  z.write(output,output.name);z.writestr('START-HERE.txt',readme)
 # Build a versioned cache list. Download bundles are deliberately not duplicated in browser storage.
-core=['./'+bundle_name,'./'+vname,'./','./index.html','./ventilation.html','./style.css','./app.js','./app.bundle.js','./offline-support.js','./airflow3d.js','./battery-bubbles.js','./manifest.webmanifest']
+core=['./'+bundle_name,'./'+vname,'./'+extra['cooling'],'./','./index.html','./ventilation.html','./cooling.html','./style.css','./app.js','./app.bundle.js','./offline-support.js','./airflow3d.js','./battery-bubbles.js','./manifest.webmanifest']
 core+=['./'+str(p.relative_to(dist)).replace('\\','/') for p in sorted((dist/'assets').rglob('*')) if p.is_file()]
 hash_=hashlib.sha256()
 for rel in core:
@@ -64,7 +67,7 @@ self.addEventListener('install',event=>event.waitUntil(prepare()));
 self.addEventListener('activate',event=>event.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('battery-3d-')&&key!==CACHE)await caches.delete(key);await self.clients.claim();for(const client of await self.clients.matchAll())client.postMessage({type:'OFFLINE_READY'})})()));
 self.addEventListener('message',event=>{if(event.data?.type==='CHECK_OFFLINE')event.source?.postMessage({type:'OFFLINE_READY'})});
 self.addEventListener('fetch',event=>{const request=event.request,url=new URL(request.url);if(request.method!=='GET'||url.origin!==self.location.origin||url.pathname.includes('/offline/'))return;
- if(request.mode==='navigate'){const page=url.pathname.endsWith('ventilation.html')?'./ventilation.html':'./';event.respondWith((async()=>{try{const response=await fetch(request);if(response.ok&&(response.headers.get('content-type')||'').includes('text/html')){const text=await response.clone().text();if(text.includes('bundle.js')||text.includes('app.js'))(await caches.open(CACHE)).put(page,response.clone())}return response}catch{return(await caches.open(CACHE)).match(page)}})());return}
+ if(request.mode==='navigate'){const page=url.pathname.endsWith('ventilation.html')?'./ventilation.html':url.pathname.endsWith('cooling.html')?'./cooling.html':'./';event.respondWith((async()=>{try{const response=await fetch(request);if(response.ok&&(response.headers.get('content-type')||'').includes('text/html')){const text=await response.clone().text();if(text.includes('bundle.js')||text.includes('app.js'))(await caches.open(CACHE)).put(page,response.clone())}return response}catch{return(await caches.open(CACHE)).match(page)}})());return}
  event.respondWith((async()=>{const cache=await caches.open(CACHE);try{const response=await fetch(request);if(response.ok)cache.put(request,response.clone());return response}catch{return(await cache.match(request,{ignoreSearch:true}))||Response.error()}})())});   // network first: online always gets fresh files, offline uses the saved copy
 '''.replace('__VERSION__',json.dumps(version)).replace('__CORE__',json.dumps(core))
 (dist/'sw.js').write_text(sw)

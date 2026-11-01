@@ -83,16 +83,53 @@ function roundedPath(pts, r = 26) {
     const d1 = b.clone().sub(a), d2 = c.clone().sub(b), rr = Math.min(r, d1.length() / 2, d2.length() / 2);
     const p1 = b.clone().addScaledVector(d1.normalize(), -rr), p2 = b.clone().addScaledVector(d2.normalize(), rr);
     path.add(new T.LineCurve3(cur, p1)); path.add(new T.QuadraticBezierCurve3(p1, b, p2)); cur = p2;
+    (path.bends ||= []).push([p1, d1.clone()], [p2, d2.clone()]);
   }
   return path;
+}
+// ---- fittings: how each pipe end meets what it connects to
+// Pipes stop at the face of the part they enter (valve body, flap, filter, cooler, non-return valve, burner, louvre)
+// and are bolted to it with a flange; at tees and corner junctions they run into a metal fitting body with a coupling
+// sleeve over each joint; every 90° bend is a formed elbow with a weld band at each end. Blower ports keep their own
+// flange and inlet duct.
+const FACE = { v123: 24, v122: 24, v134: 24, v109: 24, v110: 24, v114: 24, v117: 24, vin: 24, fg: 24, v58: 27, fa: 14, fb: 14, flt: 50, clr: 50, chk: 15 };
+const JUNCTIONS = new Set(['J', 'H', 'S1', 'J2', 'S2', 'J3', 'T117', 'J4', 'TV', 'R0', 'MR0']);
+const BLOWERS = new Set(['b1', 'b2', 'bg']);
+// Joints as on screen 1: a thin steel flange ring with bolt heads at every face a pipe meets, the pipes themselves
+// clear glass right through tees and bends (no metal balls or sleeves).
+const steel = new T.MeshStandardMaterial({ color: '#c4cbd0', metalness: .95, roughness: .28 }), boltMat = new T.MeshStandardMaterial({ color: '#4a5156', metalness: .9, roughness: .35 });
+const UP = new T.Vector3(0, 1, 0);
+function flange(at, dir, r) {
+  const g = new T.Group(); g.position.copy(at); g.quaternion.setFromUnitVectors(UP, dir.clone().normalize()); scene.add(g);
+  g.add(new T.Mesh(new T.CylinderGeometry(r * 1.5, r * 1.5, r * .34, 32), steel));
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, b = new T.Mesh(new T.CylinderGeometry(r * .13, r * .13, r * .62, 10), boltMat); b.position.set(Math.cos(a) * r * 1.26, 0, Math.sin(a) * r * 1.26); g.add(b); }
+}
+// shine: an additive reflection layer over the glass (as on screen 1) so the pipes keep bright highlight streaks
+const shineMat = new T.MeshPhysicalMaterial({ color: '#000000', roughness: .02, metalness: 0, envMapIntensity: 1.1, transparent: true, blending: T.AdditiveBlending, depthWrite: false });
+function glassTube(geo) { const t = new T.Mesh(geo, mat.glass); t.renderOrder = 6; scene.add(t); const sh = new T.Mesh(geo, shineMat); sh.renderOrder = 7; scene.add(sh); return t; }
+const fittedJunctions = new Set();
+function junction(name, at, r) { if (fittedJunctions.has(name)) return; fittedJunctions.add(name); const m = new T.Mesh(new T.SphereGeometry(r * 1.02, 24, 16), mat.glass); m.position.copy(at); m.renderOrder = 6; scene.add(m); }
+// shorten a plan polyline at either end so it stops at the face of the part it enters
+function trimEnds(pts, a, b) {
+  const q = pts.map(p => p.slice()), mv = (i, j, d) => { const [x0, y0] = q[i], [x1, y1] = q[j], L = Math.hypot(x1 - x0, y1 - y0); if (!d || !L) return; const t = Math.min(d, L - 1) / L; q[i][0] = x0 + (x1 - x0) * t; q[i][1] = y0 + (y1 - y0) * t; };
+  mv(0, 1, a); mv(q.length - 1, q.length - 2, b); return q;
 }
 const chevronShape = new T.Shape([new T.Vector2(-9, -11), new T.Vector2(3, 0), new T.Vector2(-9, 11), new T.Vector2(-3, 0)]);
 // from / to: node names; key: which flow (m³/h) it carries; air: 'dirty' (pit air with H₂), 'clean' (treated) or 'room'
 const hoseMat = new T.MeshPhysicalMaterial({ color: '#efe4b8', roughness: .12, transmission: .35, thickness: 3, transparent: true, opacity: .85, side: T.DoubleSide });   // screen 1 battery hose
 function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
+  if (!curve) pts = trimEnds(pts, FACE[from] || 0, FACE[to] || 0);
   const path = curve || roundedPath(pts), len = path.getLength();
-  const tube = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r, 16, false), curve ? hoseMat : mat.glass); tube.renderOrder = 6; scene.add(tube);
-  if (!curve) for (const u of [0, 1]) { const ball = new T.Mesh(new T.SphereGeometry(r * 1.03, 24, 16), mat.glass); ball.position.copy(path.getPointAt(u)); ball.renderOrder = 6; scene.add(ball); }   // rounded joint
+  const geo = new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r, 16, false);
+  if (curve) { const h = new T.Mesh(geo, hoseMat); h.renderOrder = 6; scene.add(h); } else glassTube(geo);
+  if (!curve && r > 9) {
+    for (const [node, u, sgn] of [[from, 0, 1], [to, 1, -1]]) {
+      const at = path.getPointAt(u), t = path.getTangentAt(u).multiplyScalar(sgn);   // t points from the end into the pipe
+      if (BLOWERS.has(node) || (/^M[LR]\d/.test(node) && !JUNCTIONS.has(node))) continue;   // blower ports and manifold tees have their own
+      if (JUNCTIONS.has(node)) { junction(node, at, r); if (len > 60) flange(at.clone().addScaledVector(t, r * 2), t, r); }   // flange on each leg just off the tee
+      else flange(at, t, r);
+    }
+  }
   // air as on screen 1: a bundle of light filaments across the bore with a gentle twist; a bright head with a fading
   // tail runs along each at the pipe's flow speed, and only as far as the air has reached
   const m = new T.ShaderMaterial({ transparent: true, depthWrite: false,
@@ -165,6 +202,23 @@ function valve(id, x, y, vertical, title, side = 'top') {
   wheel.rotation.y = closed;
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: lamp(g, 32, -10), wheel, wheelTarget: closed, closedAngle: closed, openAngle: closed + Math.sign(Math.sin(open - closed) || 1) * Math.PI / 2 });
 }
+// Exhaust Klinket 58 as a gate valve: two cones meeting point to point on the pipe, a stem and a round handwheel.
+// The cones carry the state colour (grey before Start, red closed, teal-green open); the handwheel spins when operated.
+const GATE_ON = new T.Color('#1f9e7a');
+function gateValve(id, x, y, title) {
+  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
+  const body = new T.MeshPhysicalMaterial({ color: LAMP_IDLE.clone(), roughness: .3, metalness: .1, transparent: true, opacity: .88, clearcoat: .6 });
+  for (const sgn of [-1, 1]) {                                        // cone bases outward, tips at the centre
+    const c = new T.Mesh(new T.ConeGeometry(22, 26, 32, 1, true), body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13; g.add(c);
+    const rim = new T.Mesh(new T.TorusGeometry(22, 1.6, 8, 32), new T.MeshStandardMaterial({ color: '#0f5f4a', roughness: .4 })); rim.rotation.y = Math.PI / 2; rim.position.x = sgn * 26; g.add(rim);
+  }
+  const arm = new T.Group(); arm.rotation.x = -Math.PI / 2 + .55; g.add(arm);   // stem leans toward the viewer so the wheel reads as a disc
+  const stem = new T.Mesh(new T.CylinderGeometry(2.6, 2.6, 34, 10), new T.MeshStandardMaterial({ color: '#5d6b72', metalness: .6, roughness: .4 })); stem.position.y = 17; arm.add(stem);
+  const wheel = new T.Group(); wheel.position.y = 36; arm.add(wheel);
+  wheel.add(new T.Mesh(new T.CylinderGeometry(19, 19, 4, 40), new T.MeshPhysicalMaterial({ color: '#1f8a6c', roughness: .35, clearcoat: .5 })));
+  const spoke = new T.Mesh(new T.BoxGeometry(34, 4.6, 3), new T.MeshStandardMaterial({ color: '#0f5f4a' })); spoke.position.y = 1; wheel.add(spoke);
+  return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON }, wheel, wheelTarget: 0, closedAngle: 0, openAngle: -4 * Math.PI });
+}
 function flap(id, key, x, y, title) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
   g.add(new T.Mesh(new T.BoxGeometry(24, 30, 32), mat.metal));
@@ -204,15 +258,30 @@ function blower(id, x, y, width, title, connect) {
   });
   return p;
 }
+// H₂ burner: a steel box with a smoked-glass top, so the fire inside shows from above. A row of nozzles on the burner
+// bed carries flames that flicker and grow with the burner temperature; the bed and walls glow when hot.
 function burner(id, key, x, y, title) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
-  const m = new T.MeshStandardMaterial({ color: '#4a555b', metalness: .4, roughness: .45, emissive: '#ff7a1a', emissiveIntensity: 0 });
-  g.add(new T.Mesh(new T.BoxGeometry(110, 44, 80), m));
-  g.add(new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(110, 44, 80)), new T.LineBasicMaterial({ color: '#1d2327' })));
-  const glow = sprite(glowTex, '#ff8a2a', 230, 0); glow.position.y = 10; g.add(glow);
-  const flame = sprite(flameTex, '#ffffff', 52, 0); flame.position.y = 40; g.add(flame);
+  const m = new T.MeshStandardMaterial({ color: '#3b4448', metalness: .5, roughness: .45, emissive: '#ff5a10', emissiveIntensity: 0 });
+  const W = 110, H = 44, D = 80;
+  const bed = new T.Mesh(new T.BoxGeometry(W - 8, 4, D - 8), m); bed.position.y = -H / 2 + 4; g.add(bed);                     // burner bed
+  for (const [w, d, ox, oz] of [[W, 4, 0, -D / 2 + 2], [W, 4, 0, D / 2 - 2], [4, D, -W / 2 + 2, 0], [4, D, W / 2 - 2, 0]]) {      // walls
+    const wall = new T.Mesh(new T.BoxGeometry(w, H, d), m); wall.position.set(ox, 0, oz); g.add(wall);
+  }
+  g.add(new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(W, H, D)), new T.LineBasicMaterial({ color: '#1d2327' })));
+  const nozzles = [];
+  for (let row = 0; row < 2; row++) for (let i = 0; i < 6; i++) {
+    const nx = -W / 2 + 14 + i * (W - 28) / 5, nz = row ? 13 : -13;
+    const n = new T.Mesh(new T.CylinderGeometry(2.6, 3.2, 4, 10), new T.MeshStandardMaterial({ color: '#20262a', metalness: .6, roughness: .4 })); n.position.set(nx, -H / 2 + 8, nz); g.add(n);
+    const f = sprite(flameTex, '#ffffff', 1, 0); f.position.set(nx, -2, nz - 7); f.renderOrder = 8; g.add(f);
+    nozzles.push({ f, x0: nx, ph: Math.random() * 6.28, sp: 9 + Math.random() * 6 });
+  }
+  const ember = sprite(glowTex, '#ff6a1a', 1, 0); ember.scale.set(W * 1.1, D * 1.1, 1); ember.position.y = -6; ember.renderOrder = 7; g.add(ember);
+  const lid = new T.Mesh(new T.BoxGeometry(W - 6, 2, D - 6), new T.MeshPhysicalMaterial({ color: '#3a2a22', roughness: .05, transparent: true, opacity: .32, clearcoat: 1, depthWrite: false }));
+  lid.position.y = H / 2 - 1; lid.renderOrder = 9; g.add(lid);                                                                   // smoked-glass top
+  const glow = sprite(glowTex, '#ff8a2a', 230, 0); glow.position.y = 10; glow.renderOrder = 9; g.add(glow);
   const lg = new T.Group(); lg.position.set(66, 0, -46); g.add(lg);
-  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, flame });
+  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, nozzles, ember });
 }
 function diamond(x, y, kind) {
   const top = canvasTexture(128, (c, s) => {
@@ -232,21 +301,28 @@ function louvre(x, y, dir) {
 }
 const wireMat = new T.MeshStandardMaterial({ color: '#8d989f', metalness: .7, roughness: .4 });
 function wire(pts, r = 2.5) { const path = new T.CurvePath(); for (let i = 1; i < pts.length; i++) path.add(new T.LineCurve3(P(pts[i - 1][0], pts[i - 1][1], PIPE_Y - 4), P(pts[i][0], pts[i][1], PIPE_Y - 4))); scene.add(new T.Mesh(new T.TubeGeometry(path, pts.length * 4, r, 8, false), wireMat)); }
-function probe(x, y) { const m = new T.Mesh(new T.CylinderGeometry(6, 6, 10, 14), mat.metal); m.position.copy(P(x, y, PIPE_Y + 14)); scene.add(m); const t = new T.Mesh(new T.SphereGeometry(7, 14, 10), mat.dark); t.position.copy(P(x, y - 14, PIPE_Y + 18)); scene.add(t); wire([[x, y], [x, y - 14]], 2); }
+function boss(x, y) { const b = new T.Mesh(new T.CylinderGeometry(5, 5, 8, 14), steel); b.position.copy(P(x, y, PIPE_Y + 14)); scene.add(b); }
+function probe(x, y) { boss(x, y); const m = new T.Mesh(new T.CylinderGeometry(6, 6, 10, 14), mat.metal); m.position.copy(P(x, y, PIPE_Y + 14)); scene.add(m); const t = new T.Mesh(new T.SphereGeometry(7, 14, 10), mat.dark); t.position.copy(P(x, y - 14, PIPE_Y + 18)); scene.add(t); wire([[x, y], [x, y - 14]], 2); }
 function openEnd(x, y, rot) { const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); g.rotation.y = rot; scene.add(g); const c = new T.Mesh(new T.CylinderGeometry(4, 4, 40, 10), mat.metal); c.rotation.x = Math.PI / 2; g.add(c); }
 function checkValve(x, y) { const sh = new T.Shape([new T.Vector2(-14, -14), new T.Vector2(14, -14), new T.Vector2(0, 12)]); const m = new T.Mesh(new T.ShapeGeometry(sh), mat.dark); m.rotation.x = -Math.PI / 2; m.position.copy(P(x, y, PIPE_Y + 16)); scene.add(m); const b = new T.Mesh(new T.CylinderGeometry(16, 16, 26, 20), mat.metal); b.rotation.z = Math.PI / 2; b.position.copy(P(x, y, PIPE_Y)); scene.add(b); }
 // small round dial on a canvas (thermometers, V meter); redrawn only when the value changes
-function dial(x, y) {
+function dial(x, y, kind = 'arrow') {
   const c = document.createElement('canvas'); c.width = c.height = 256; const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
   const top = new T.MeshBasicMaterial({ map: tex }), side = new T.MeshStandardMaterial({ color: '#c9d2d7', metalness: .7, roughness: .3 });
   const m = new T.Mesh(new T.CylinderGeometry(20, 20, 8, 32), [side, top, side]); m.position.copy(P(x, y, PIPE_Y)); scene.add(m);
   let shown = null;
   return v => {
     const r = Math.round(v); if (r === shown) return; shown = r; const g = c.getContext('2d');
-    g.fillStyle = '#f4f7f8'; g.beginPath(); g.arc(128, 128, 124, 0, 7); g.fill(); g.strokeStyle = '#1d2327'; g.lineWidth = 10; g.stroke();
-    g.lineWidth = 6; for (let i = 0; i <= 10; i++) { const a = Math.PI * .75 + i / 10 * Math.PI * 1.5; g.beginPath(); g.moveTo(128 + Math.cos(a) * 92, 128 + Math.sin(a) * 92); g.lineTo(128 + Math.cos(a) * 112, 128 + Math.sin(a) * 112); g.stroke(); }
-    const a = Math.PI * .75 + Math.min(1, Math.max(0, v / 300)) * Math.PI * 1.5; g.strokeStyle = '#c8322b'; g.lineWidth = 10; g.beginPath(); g.moveTo(128, 128); g.lineTo(128 + Math.cos(a) * 96, 128 + Math.sin(a) * 96); g.stroke();
-    g.fillStyle = '#1d2327'; g.beginPath(); g.arc(128, 128, 14, 0, 7); g.fill(); tex.needsUpdate = true;
+    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.fill(); g.strokeStyle = '#1d2327'; g.lineWidth = 16; g.stroke();
+    g.fillStyle = g.strokeStyle = '#1d2327';
+    if (kind === 'V') { g.font = 'bold 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('V', 128, 140); }
+    else {                                                                            // ↗ arrow across the face, swinging with temperature
+      const a = -Math.PI * (.85 - .7 * Math.min(1, Math.max(0, (v - 20) / 200))), dx = Math.cos(a), dy = Math.sin(a);
+      const x0 = 128 - dx * 72, y0 = 128 - dy * 72, x1 = 128 + dx * 78, y1 = 128 + dy * 78;
+      g.lineWidth = 12; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1 - dx * 20, y1 - dy * 20); g.stroke();
+      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x1 - dx * 40 - dy * 22, y1 - dy * 40 + dx * 22); g.lineTo(x1 - dx * 40 + dy * 22, y1 - dy * 40 - dx * 22); g.closePath(); g.fill();
+    }
+    tex.needsUpdate = true;
   };
 }
 
@@ -262,36 +338,32 @@ const hose = c => {
   const N = c.nip, nx = N.x + 1000, ny = N.z + 786, tx = teeX(c), h = PIPE_Y;
   return [P(tx, MAN_Y, h), P(tx - 3, MAN_Y + 26, h + 18), P(tx + 6, ny - 8, h + 26), P(nx - 20, ny + 2, N.y + 20), P(nx - 7, ny, N.y + 7), N.clone()];
 };
-// visible joints: a tee collar where each hose leaves the manifold and a hose clip on each cell's vent nipple
-const jointMat = new T.MeshStandardMaterial({ color: '#c9d2d7', metalness: .75, roughness: .3 });
-for (const c of batteries) {
-  const tee = new T.Mesh(new T.CylinderGeometry(14, 14, 16, 20), jointMat); tee.rotation.z = Math.PI / 2; tee.position.copy(P(teeX(c), MAN_Y, PIPE_Y)); scene.add(tee);
-  const boss = new T.Mesh(new T.CylinderGeometry(7.5, 7.5, 14, 16), jointMat); boss.position.copy(P(teeX(c), MAN_Y + 10, PIPE_Y)); boss.rotation.x = Math.PI / 2; scene.add(boss);
-  const clip = new T.Mesh(new T.CylinderGeometry(7, 7, 8, 16), jointMat); clip.quaternion.setFromUnitVectors(new T.Vector3(0, 1, 0), c.up); clip.position.copy(c.nip).addScaledVector(c.up, 5); scene.add(clip);
-}
 left.forEach((c, i) => {
   pipe('cellL' + i, 'ML' + i, f => f.out / 4, null, 'dirty', { r: 5.5, curve: new T.CatmullRomCurve3(hose(c).reverse()) });
   const x = teeX(c), next = left[i + 1] ? teeX(left[i + 1]) : 270;
   pipe('ML' + i, left[i + 1] ? 'ML' + (i + 1) : 'R0', f => f.out * (i + 1) / 4, [[x, MAN_Y], [next, MAN_Y]], 'dirty', { r: 11 });
 });
 pipe('R0', 'J', 'out', [[270, MAN_Y], [270, 1095]], 'dirty');
-for (const [x, sgn] of [[teeX(left[0]), 1], [teeX(right[right.length - 1]), -1]]) { const cap = new T.Mesh(new T.CylinderGeometry(12, 12, 8, 20), jointMat); cap.rotation.z = Math.PI / 2; cap.position.copy(P(x + sgn * 14, MAN_Y, PIPE_Y)); scene.add(cap); }   // blind ends
+for (const [x, sgn] of [[teeX(left[0]), 1], [teeX(right[right.length - 1]), -1]]) { junction('cap' + sgn, P(x + sgn * 14, MAN_Y, PIPE_Y), 11); flange(P(x + sgn * 4, MAN_Y, PIPE_Y), new T.Vector3(sgn, 0, 0), 11); }   // rounded glass blind ends
 pipe('J', 'v123', 'draught', [[270, 1095], [270, 1000]], 'dirty');
-pipe('v123', 'v58', 'draught', [[270, 1000], [270, 360], [140, 360]], 'dirty');
+pipe('v123', 'TV', 'draught', [[270, 1000], [270, 360]], 'dirty');
+pipe('TV', 'v58', 'draught', [[270, 360], [140, 360]], 'dirty');
 pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty');
-pipe('vent', 'v58', 'draught', [[300, 320], [300, 360], [270, 360]], 'room');   // open vent head joining the exhaust
+pipe('vent', 'TV', 'draught', [[300, 320], [300, 360], [270, 360]], 'room');   // open vent head joining the exhaust
 pipe('J', 'H', 'header', [[270, 1095], [385, 1095]], 'dirty');
 pipe('H', 'v122', 'qm', [[385, 1095], [385, 1000]], 'dirty');
 pipe('H', 'v134', 'qgPit', [[385, 1095], [520, 1095], [520, 990]], 'dirty');
 // treatment: 122 → 101 → filter → flaps 103 → H₂ burners → TC → cooler → TC → split to 109 / 110
-pipe('v122', 'S1', 'qm', [[385, 1000], [385, 585]], 'dirty');
+pipe('v122', 'flt', 'qm', [[385, 1000], [385, 760]], 'dirty');
+pipe('flt', 'S1', 'qm', [[385, 760], [385, 585]], 'dirty');
 pipe('S1', 'fa', 'qa', [[385, 585], [385, 440], [490, 440]], 'dirty');
 pipe('S1', 'fb', 'qb', [[385, 585], [490, 585]], 'dirty');
 pipe('fa', 'h1', 'qa', [[490, 440], [585, 440]], 'dirty');
 pipe('fb', 'h2', 'qb', [[490, 585], [595, 585]], 'dirty');
 pipe('h1', 'J2', 'qa', [[695, 440], [790, 440], [790, 512]], 'clean');
 pipe('h2', 'J2', 'qb', [[705, 585], [790, 585], [790, 512]], 'clean');
-pipe('J2', 'S2', 'qm', [[790, 512], [1035, 512]], 'clean');
+pipe('J2', 'clr', 'qm', [[790, 512], [910, 512]], 'clean');
+pipe('clr', 'S2', 'qm', [[910, 512], [1035, 512]], 'clean');
 pipe('S2', 'v109', 'q1', [[1035, 512], [1035, 420], [1140, 420]], 'clean');
 pipe('S2', 'v110', 'q2', [[1035, 512], [1035, 555], [1150, 555]], 'clean');
 // blower outlets → common line → 114 (compartment) and 117 (return to the pit through the non-return valve)
@@ -299,7 +371,8 @@ pipe('J3', 'T117', 'qm', [[1445, 450], [1545, 450]], 'clean');
 pipe('T117', 'v114', 'toCompt', [[1545, 450], [1580, 450]], 'clean');
 pipe('v114', 'compartment', 'toCompt', [[1580, 450], [1625, 450]], 'clean');
 pipe('T117', 'v117', 'recirc', [[1545, 450], [1545, 960]], 'clean');
-pipe('v117', 'J4', 'recirc', [[1545, 960], [1545, 1020], [1640, 1020]], 'clean');
+pipe('v117', 'chk', 'recirc', [[1545, 960], [1545, 1020], [1595, 1020]], 'clean');
+pipe('chk', 'J4', 'recirc', [[1595, 1020], [1640, 1020]], 'clean');
 // fresh compartment air → inlet valve → pit
 pipe('compt', 'vin', 'inlet', [[1675, 790], [1640, 790], [1640, 950]], 'room');
 pipe('vin', 'J4', 'inlet', [[1640, 950], [1640, 1020]], 'room');
@@ -313,7 +386,7 @@ right.forEach((c, i) => {
 pipe('compt', 'fg', 'qgRoom', [[625, 750], [560, 750], [560, 825]], 'room');
 
 valve('v123', 270, 1000, true, 'Valve 123', 'left');
-valve('v58', 140, 360, false, 'Exhaust Klinket 58', 'top');
+gateValve('v58', 140, 360, 'Exhaust Klinket 58');
 valve('v122', 385, 1000, true, 'Valve 122', 'right');
 valve('v109', 1140, 420, false, 'Valve 109');
 valve('v110', 1150, 555, false, 'Valve 110');
@@ -331,10 +404,10 @@ burner('h2', 'b', 650, 585, 'H₂ burner 2');
 const suction = (x0, y, x1, h) => [[x0, y], [x0 + 45, y], [x0 + 70, y, h], [x1, y, h], [x1, y, PIPE_Y]];
 // the glass suction pipe disappears over the cream blower body, so its run over the motor and down into the inlet eye
 // is a solid duct, ending in a collar at the eye — the connection reads clearly from above
-const ductMat = new T.MeshStandardMaterial({ color: '#a9b4ba', metalness: .7, roughness: .35 });
+// blower inlet: the suction pipe runs over the motor and drops into the inlet eye, flanged onto the eye
 function inletDuct(pts) {
-  scene.add(new T.Mesh(new T.TubeGeometry(roundedPath(pts.slice(1)), 48, 12, 16, false), ductMat));
-  const [x, y] = pts[pts.length - 1], collar = new T.Mesh(new T.TorusGeometry(14, 4, 10, 24), ductMat); collar.rotation.x = Math.PI / 2; collar.position.copy(P(x, y, PIPE_Y + 2)); scene.add(collar);
+  const path = roundedPath(pts.slice(1)); glassTube(new T.TubeGeometry(path, 48, 12, 16, false));
+  const [x, y] = pts[pts.length - 1]; flange(P(x, y, PIPE_Y + 3), new T.Vector3(0, 1, 0), 12);
 }
 blower('b1', 1300, 420, 118, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
   pipe('v109', 'b1', 'q1', suction(1140, 420, 1300, h), 'clean'); inletDuct(suction(1140, 420, 1300, h));
@@ -347,15 +420,27 @@ blower('b2', 1300, 555, 118, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
 blower('bg', 650, 880, 100, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
   pipe('v134', 'bg', 'qgPit', [[520, 990], [520, 880], ...suction(560, 880, 650, h)], 'dirty'); inletDuct(suction(560, 880, 650, h));
   pipe('fg', 'bg', 'qgRoom', [[560, 825], [560, 880]], 'room');
+  junction('GJ', P(560, 880, PIPE_Y), 13);                                        // tee where the galley flap line joins the suction
   pipe('bg', 'galley', 'qg', [[fx, fy, fh], [ax, ay, ah], [780, ay, ah]], 'dirty');   // straight right to the galley
   arrow(830, ay, 'r', 'dirty', 'qg', 2, 26);
 });
 diamond(385, 760, 'filter'); diamond(910, 512, 'cool');
-{ const m = new T.Mesh(new T.BoxGeometry(34, 26, 30), mat.dark); m.position.copy(P(345, 890, PIPE_Y)); scene.add(m); const cap = new T.Mesh(new T.CylinderGeometry(9, 9, 10, 16), mat.metal); cap.position.copy(P(338, 890, PIPE_Y + 18)); scene.add(cap); wire([[362, 890], [385, 890]], 4); }   // 101
+{ // 101 · H₂ sensor, as drawn ( –⊏‖–| ): a stub off the pipe, a flange pair, the sensor cup opening outward, a short tail
+  const dark = new T.MeshStandardMaterial({ color: '#2f383d', metalness: .5, roughness: .45 }), y = 890, h = PIPE_Y;
+  const bar = (x0, x1, r, m) => { const c = new T.Mesh(new T.CylinderGeometry(r, r, Math.abs(x1 - x0), 12), m); c.rotation.z = Math.PI / 2; c.position.copy(P((x0 + x1) / 2, y, h)); scene.add(c); };
+  bar(373, 357, 3.5, steel);                                                         // stub from the pipe wall
+  for (const x of [356, 351]) { const d = new T.Mesh(new T.CylinderGeometry(10, 10, 2.6, 24), steel); d.rotation.z = Math.PI / 2; d.position.copy(P(x, y, h)); scene.add(d); }   // ‖ flange pair
+  bar(350, 345, 3.5, steel);
+  const cup = new T.Group(); cup.position.copy(P(337, y, h)); scene.add(cup);          // ⊏ sensor cup, open to the left
+  for (const [w, d, ox, oz] of [[3, 24, 7, 0], [15, 3, 0, -10.5], [15, 3, 0, 10.5]]) { const b = new T.Mesh(new T.BoxGeometry(w, 16, d), dark); b.position.set(ox, 0, oz); cup.add(b); }
+  const core = new T.Mesh(new T.BoxGeometry(10, 12, 16), new T.MeshStandardMaterial({ color: '#7d8a91', metalness: .4, roughness: .5 })); core.position.x = 1; cup.add(core);
+  bar(330, 318, 2.4, dark);                                                          // – tail
+}
 const thermo = [dial(632, 690), dial(694, 690)];                                 // thermometers across burner 2 (in / out)
 wire([[580, 585], [580, 690], [612, 690]]); wire([[652, 690], [674, 690]]); wire([[714, 690], [745, 690], [745, 585]]);
 wire([[845, 512], [845, 345], [877, 345]]); wire([[917, 345], [950, 345], [950, 512]]);   // V meter across the cooler
-const vDial = dial(897, 345);
+const vDial = dial(897, 345, 'V');
+[[580, 585], [745, 585], [845, 512], [950, 512]].forEach(([x, y]) => boss(x, y));
 probe(755, 440); probe(770, 585); probe(990, 512);                               // thermocouples (TC)
 checkValve(1595, 1020); openEnd(300, 300, 0); openEnd(625, 750, Math.PI / 2);
 // small fittings on the lines, as drawn: ╤ test points, the joint / nipple / flexible joint on the 122 line, ▲ on the riser
@@ -538,10 +623,15 @@ function frame(now) {
     if (p.blade) p.blade.rotation.y += (p.bladeTarget - p.blade.rotation.y) * Math.min(1, dt * 6);
     if (p.type === 'burner') {
       const T0 = p.key === 'a' ? S.pit.Ta : S.pit.Tb, k = Math.min(1, Math.max(0, (T0 - EST.ambient) / 110));
-      p.mat.emissiveIntensity = 1.4 * k; p.glow.material.opacity = .55 * k; p.flame.material.opacity = Math.max(0, (k - .3) / .7);
-      p.flame.scale.setScalar(52 * (.85 + .15 * Math.sin(now / 90 + p.x)));
+      p.mat.emissiveIntensity = .9 * k; p.glow.material.opacity = .35 * k; p.ember.material.opacity = .9 * k;
+      const lit = Math.min(1, Math.max(0, (k - .08) / .6)), t = now / 1000;
+      for (const n of p.nozzles) {                                                   // each flame flickers on its own
+        const fl = .72 + .18 * Math.sin(t * n.sp + n.ph) + .1 * Math.sin(t * n.sp * 2.3 + n.ph * 1.7);
+        n.f.material.opacity = Math.min(1, lit * 1.4) * (.8 + .2 * fl); n.f.scale.set(12 + 7 * lit * fl, (12 + 34 * lit) * fl, 1);
+        n.f.position.x = n.x0 + Math.sin(t * 7 + n.ph) * .8;
+      }
     }
-    const target = !S.running ? LAMP_IDLE : isOn(p) ? LAMP_ON : LAMP_OFF;
+    const target = !S.running ? LAMP_IDLE : isOn(p) ? (p.lamp.on || LAMP_ON) : LAMP_OFF;
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
   thermo[0](EST.ambient); thermo[1](S.pit.Tb); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler

@@ -21,7 +21,7 @@ const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opa
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
 // Dark studio look for the circuit (as in the reference rendering): dark backdrop, light drawing labels.
-{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}body.inspector-hidden #controls-toggle{display:block!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
+{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}body.inspector-hidden #controls-toggle{display:block!important}#view-top,#view-front,#fullscreen{display:none!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
 // Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
 // 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
@@ -464,7 +464,8 @@ function setView(mode){
 document.querySelector('#view-top').onclick=()=>setView('top');
 document.querySelector('#view-front').onclick=()=>setView('front');
 addEventListener('keydown',e=>{if(e.key==='Escape'&&viewMode==='front')setView('top')});
-document.querySelector('#viewport').addEventListener('dblclick',()=>{if(viewMode==='front')setView('top')});
+// with no view buttons on screen, a double-tap on empty space switches between Top and Front views
+document.querySelector('#viewport').addEventListener('dblclick',()=>setView(viewMode==='front'?'top':'front'));
 
 let last=performance.now();function animate(now){const dt=Math.min(.05,(now-last)/1000);last=now;updateFlow();wheelUpdate(dt);for(const battery of integratedBatteries)battery.update(dt);if(webglAvailable){if(actualModelReady)nativeAirUpdate(flowing?dt:0);else network.update(flowing?dt:0)}renderer.render(scene,camera);requestAnimationFrame(animate)}
 const chooser=document.querySelector('#component-select');for(const p of parts.values()){const option=document.createElement('option');option.value=p.id;option.textContent=p.title;chooser.append(option)}chooser.onchange=()=>{if(chooser.value)select(chooser.value);else clearSelection()};

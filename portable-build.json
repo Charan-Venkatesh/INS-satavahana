@@ -1,17 +1,17 @@
 {
   "offline_file": "/Users/charanvenkatesh/Downloads/3d-/battery-pit-touchscreen/dist/offline/Battery-Agitation-Offline.html",
-  "bytes": 21696774,
+  "bytes": 21696904,
   "embedded_assets": [
     "assets/assembled-battery-agitation.glb",
     "assets/transparent-straight-pipe.png",
     "assets/assembled-air-particles.json",
     "assets/safety-release-detail.jpg",
     "assets/assembled-top-view.jpg",
-    "assets/circuit-reference.jpg",
     "assets/battery-photo-top.jpg",
+    "assets/circuit-reference.jpg",
     "assets/icon-192.png"
   ],
-  "service_worker_cache": "battery-3d-d3cda6b2ca9e428a",
+  "service_worker_cache": "battery-3d-d190d1c619672497",
   "cached_assets": 23,
   "no_external_runtime_dependencies": true
 }

@@ -21,7 +21,7 @@ const ground=mesh(scene,new T.PlaneGeometry(2100,1700),new T.ShadowMaterial({opa
 const network=new AirflowNetwork(scene,{radius:13,particleRadius:3,shellOpacity:.23});network.shellMaterial.color.set('#97c7bd');network.boreMaterial.color.set('#b7dbd2');const pipes=[];
 function pipe(points,branch='common',kind='main',radius=13){const p=network.addPipe(points.map(p=>pos(p[0],p[1],p[2]??23)),{radius,innerRadius:radius*.78,bend:22,collars:false,segmentsPerUnit:.3,color:'#258ed0',rim:1.2,dash:60});if(p){p.branch=branch;p.kind=kind;p.speed=90;p.intensity=.9;p.flow=1;pipes.push(p)}return p}
 // Dark studio look for the circuit (as in the reference rendering): dark backdrop, light drawing labels.
-{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}body.inspector-hidden #controls-toggle{display:block!important}#view-top,#view-front,#fullscreen{display:none!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
+{const st=document.createElement('style');st.textContent='#circuit{background:radial-gradient(ellipse at 50% 40%,#353d41 0%,#22282b 70%)}#circuit .drawing-label{color:#e8f2f3}#circuit .drawing-label small{color:#a9bec2}#circuit .drawing-label.muted{color:#86999d}#circuit .canvas-info{display:none}body.inspector-hidden aside{display:none!important}body.inspector-hidden main{grid-template-columns:minmax(0,1fr)!important}body.inspector-hidden #controls-toggle{display:block!important}.part-button,.part-button:hover,.part-button.selected,.part-button:focus{box-shadow:none!important;background:transparent!important;outline:none!important}#view-top,#view-front,#fullscreen{display:none!important}body.front-only .top-actions>:not(#start){display:none!important}body.front-only aside{display:none!important}body.front-only main{grid-template-columns:minmax(0,1fr)!important}';document.head.append(st)}
 const branches={port:{open:false,auto:true,hand:true,value:.145,wheel:0},stbd:{open:false,auto:true,hand:true,value:.145,wheel:0}};
 // Auto reducer ON reduces the supply to 0.45 kg/cm²; OFF (double-click to switch) bypasses it, so the full
 // 45 kg/cm² supply passes on. Air passes whenever the shut-off is open.
@@ -61,8 +61,8 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  label('Shut-off valve',x,225,'center');
  pipe([[x,353],[x,401]],side);g=part(side+'-auto','auto',side,x,460,'Automatic reducer · '+B,92);squareSymbol(g,'V');label('Auto Reducer',x+inner*90,455,P?'left':'right','0.45 kg/cm²');
  pipe([[x,517],[x,584]],side);g=part(side+'-hand','hand',side,x,642,'Hand reducer · '+B,96);squareSymbol(g,'X');handWheel(g,side);label('Hand Reducer',x+inner*90,638,P?'left':'right','0.13–0.16 kg/cm²');
- // Separate accessible target for the outboard handwheel, without rotating the body.
- const h=document.createElement('button');h.className='part-button';h.setAttribute('aria-label','Inspect '+B+' side adjustment handle');h.onclick=()=>{select(side+'-hand');tapSwitch(side,'hand')};labelsRoot.append(h);h.style.minWidth=h.style.minHeight='44px';hotspots.push({el:h,x:x+out*124,z:642,size:68});
+ // The whole hand reducer is one tap area: X body, brass bonnet and T-handle (from 48 inboard to 158 outboard).
+ {const hb=hotspots[hotspots.length-1];hb.x=x+out*55;hb.size=210;hb.h=96}
  pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,80);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
  pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,80);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
@@ -399,7 +399,7 @@ function topBattery(side,box,centre,S,parts){
  document.querySelector('#labels').append(el);hotspots.push({el,x:bc.x+900,z:bc.z+750,size:(bb.max.x-bb.min.x)*.66,h:(bb.max.z-bb.min.z)*.8,cell:true});   // the cell body, not the hose or lid fittings
  // i just outside the pair, on the inboard side, level with the top of the cells
  const mine=topBatteries.filter(t=>t.side===side).map(t=>new T.Box3().setFromObject(t.b.group)),u=mine.reduce((a,c)=>a.union(c),new T.Box3()),inf=infoNodes[side];
- if(inf){inf.x=(side==='port'?u.max.x+20:u.min.x-20)+900;inf.z=u.min.z+30+750}
+ if(inf){inf.x=(side==='port'?u.max.x+46:u.min.x-46)+900;inf.z=u.min.z+20+750}
  layout();
 }
 function applyBatteryView(){

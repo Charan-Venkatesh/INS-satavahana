@@ -73,7 +73,7 @@ const haze = [588, 1392].map(x => { const s = sprite(glowTex, '#e0a21c', 1, 0); 
 // Each pipe runs from one node to the next in the direction air moves. Nodes are the valves, flaps, blowers, junctions,
 // air sources and outlets of the drawing. Air "reaches" a pipe when everything upstream of it is open (it then fills
 // the pipe and rests against the closed part at its end); it "flows" only where the model gives it a flow rate.
-const AIR = { dirty: new T.Color('#4d6a7d'), clean: new T.Color('#1f5f9e'), room: new T.Color('#2f7f9a') };   // air in cool blue-greys (pit air greyer, treated air bluer), dark enough for the light backdrop
+const AIR = { dirty: new T.Color('#2a4fc0'), clean: new T.Color('#2457d6'), room: new T.Color('#1f86d1') };   // circuit 1's air blues   // air in cool blue-greys (pit air greyer, treated air bluer), dark enough for the light backdrop
 const pipes = [];
 function roundedPath(pts, r = 26) {
   const v = pts.map(([x, y, h]) => P(x, y, h ?? PIPE_Y)), path = new T.CurvePath(); let cur = v[0];
@@ -108,7 +108,7 @@ function flange(at, dir, r) {
 const shineMat = new T.MeshPhysicalMaterial({ color: '#000000', roughness: .02, metalness: 0, envMapIntensity: 1.1, transparent: true, blending: T.AdditiveBlending, depthWrite: false });
 function glassTube(geo) { const t = new T.Mesh(geo, mat.glass); t.renderOrder = 6; scene.add(t); const sh = new T.Mesh(geo, shineMat); sh.renderOrder = 7; scene.add(sh); return t; }
 const fittedJunctions = new Set();
-function junction(name, at, r) { if (fittedJunctions.has(name)) return; fittedJunctions.add(name); const m = new T.Mesh(new T.SphereGeometry(r * 1.02, 24, 16), mat.glass); m.position.copy(at); m.renderOrder = 6; scene.add(m); }
+function junction(name, at, r) { if (fittedJunctions.has(name)) return; fittedJunctions.add(name); const m = new T.Mesh(new T.SphereGeometry(r * .995, 24, 16), mat.glass); m.position.copy(at); m.renderOrder = 6; scene.add(m); }
 // shorten a plan polyline at either end so it stops at the face of the part it enters
 function trimEnds(pts, a, b) {
   const q = pts.map(p => p.slice()), mv = (i, j, d) => { const [x0, y0] = q[i], [x1, y1] = q[j], L = Math.hypot(x1 - x0, y1 - y0); if (!d || !L) return; const t = Math.min(d, L - 1) / L; q[i][0] = x0 + (x1 - x0) * t; q[i][1] = y0 + (y1 - y0) * t; };
@@ -126,7 +126,7 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
     for (const [node, u, sgn] of [[from, 0, 1], [to, 1, -1]]) {
       const at = path.getPointAt(u), t = path.getTangentAt(u).multiplyScalar(sgn);   // t points from the end into the pipe
       if (BLOWERS.has(node) || (/^M[LR]\d/.test(node) && !JUNCTIONS.has(node))) continue;   // blower ports and manifold tees have their own
-      if (JUNCTIONS.has(node)) { junction(node, at, r); if (len > 60) flange(at.clone().addScaledVector(t, r * 2), t, r); }   // flange on each leg just off the tee
+      if (JUNCTIONS.has(node)) { junction(node, at, r); continue; }   // tees and corners: one smooth glass passage, no flanges crowding them
       else flange(at, t, r);
     }
   }
@@ -135,9 +135,9 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
   const m = new T.ShaderMaterial({ transparent: true, depthWrite: false,
     uniforms: { uPhase: { value: Math.random() * 10 }, uAlpha: { value: 0 }, uReach: { value: 0 }, uLen: { value: len }, uColor: { value: AIR[air].clone() } },
     vertexShader: 'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: 'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.55,head*.6),a);}' });
+    fragmentShader: 'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.3+.7*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.5,head*.6),a);}' });
   const streams = new T.Group(); scene.add(streams);
-  const pts3 = path.getSpacedPoints(Math.max(4, Math.ceil(len / 5))), K = r > 9 ? 16 : 7;
+  const pts3 = path.getSpacedPoints(Math.max(4, Math.ceil(len / 5))), K = r > 9 ? 22 : 8;   // as circuit 1 (22 trails per pipe)
   for (let k = 0; k < K; k++) {
     const seed = (k * 37 % K) / K, ang0 = k / K * Math.PI * 2, rr = r * (.25 + .55 * ((k * 53 % 97) / 97)), pos = [], us = [], seeds = [];
     for (let i = 0; i < pts3.length; i++) {
@@ -158,8 +158,8 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
   const coreMat = new T.ShaderMaterial({ transparent: true, depthWrite: false,
     uniforms: { uColor: { value: AIR[air].clone() }, uAlpha: { value: 0 }, uReach: { value: 0 }, uPhase: { value: Math.random() }, uLen: { value: len } },
     vertexShader: 'varying float vU;void main(){vU=uv.x;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: 'uniform vec3 uColor;uniform float uAlpha;uniform float uReach;uniform float uPhase;uniform float uLen;varying float vU;void main(){if(vU>uReach)discard;float x=fract(vU*uLen/46.-uPhase);float pulse=smoothstep(0.,.18,x)*(1.-smoothstep(.45,.7,x));float a=uAlpha*(.28+.5*pulse);gl_FragColor=vec4(uColor*(1.-.35*pulse),a);}' });
-  const core = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r * .62, 12, false), coreMat); core.renderOrder = 4; scene.add(core);
+    fragmentShader: 'uniform vec3 uColor;uniform float uAlpha;uniform float uReach;uniform float uPhase;uniform float uLen;varying float vU;void main(){if(vU>uReach)discard;float x=fract(vU*uLen/120.-uPhase);float b=.5+.5*sin(x*6.2832);float a=uAlpha*(.32+.1*b);gl_FragColor=vec4(mix(uColor,vec3(.72,.86,1.),.55+.1*b),a);}' });
+  const core = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r * .8, 12, false), coreMat); core.renderOrder = 3; scene.add(core); core.visible = false;
   const N = Math.max(8, Math.round(len / 4)), lut = path.getSpacedPoints(N - 1), nb = Math.max(3, Math.round(len / (r > 9 ? 16 : 22)));
   const bpos = new Float32Array(nb * 3), bal = new Float32Array(nb), bsz = new Float32Array(nb), bgeo = new T.BufferGeometry();
   bgeo.setAttribute('position', new T.BufferAttribute(bpos, 3).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aAlpha', new T.BufferAttribute(bal, 1).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aSize', new T.BufferAttribute(bsz, 1));
@@ -185,11 +185,11 @@ function pipeUpdate(p, dt, q, color, px, now) {
   const u = p.mat.uniforms; u.uAlpha.value = p.show; u.uReach.value = p.fill; u.uColor.value.copy(color);
   u.uPhase.value += dt * (flowing ? .2 + 1 * Math.min(1.5, q / 600) : 0);
   p.streams.visible = p.show > .01;
-  const cu = p.coreMat.uniforms; cu.uAlpha.value = p.show; cu.uReach.value = p.fill; cu.uColor.value.copy(color); p.core.visible = p.streams.visible;
+  const cu = p.coreMat.uniforms; cu.uAlpha.value = p.show; cu.uReach.value = p.fill; cu.uColor.value.copy(color); p.core.visible = p.streams.visible;   // faint tint under the trails
   cu.uPhase.value += dt * (flowing ? .25 + 1.1 * Math.min(1.5, q / 600) : 0);       // pulses travel with the flow; still when blocked
   // bubbles ride the flow; where the air is blocked they drift slowly up to the closed part
-  const b = p.bmat.uniforms; b.uAlpha.value = p.show; b.uScale.value = px; b.uColor.value.copy(color); p.bpts.visible = p.streams.visible;
-  if (p.bpts.visible) {
+  const b = p.bmat.uniforms; b.uAlpha.value = p.show; b.uScale.value = px; b.uColor.value.copy(color); p.bpts.visible = false;
+  if (false) {
     const v = (flowing ? 16 + 84 * Math.min(1.5, q / 600) : 6) / p.len, t = now / 1000;
     for (let i = 0; i < p.bubbles.length; i++) {
       const s = p.bubbles[i]; s.u += v * s.sp * dt; if (s.u >= (flowing ? 1 : p.fill)) s.u = flowing ? s.u % 1 : Math.random() * p.fill * .3;
@@ -210,8 +210,37 @@ function pipeUpdate(p, dt, q, color, px, now) {
     }
     p.sgeo.attributes.position.needsUpdate = p.sgeo.attributes.aAlpha.needsUpdate = true;
   }
-  p.spts.visible = p.bpts.visible;
-  if (p.chevron) { p.chevron.material.color.copy(color); p.chevron.material.opacity = p.fill > .5 ? (flowing ? .55 + .4 * Math.sin(now / 200 + p.len) : .3) : 0; }
+  p.spts.visible = false;
+  if (p.chevron) { p.chevron.visible = false; p.chevron.material.color.copy(color); p.chevron.material.opacity = p.fill > .5 ? (flowing ? .55 + .4 * Math.sin(now / 200 + p.len) : .3) : 0; }
+}
+// plumes: where air leaves the circuit (overboard past 58, TO COMPT louvre, galley discharge) a thick blue-white snowy
+// cloud pours out, narrow at the mouth, slowing and spreading as it mixes; strength follows the flow. Appearance only.
+const plumes = [];
+function plume(x, y, dx, dy, key) {
+  const n = 560, pos = new Float32Array(n * 3), al = new Float32Array(n), sz = new Float32Array(n), geo = new T.BufferGeometry();
+  geo.setAttribute('position', new T.BufferAttribute(pos, 3).setUsage(T.DynamicDrawUsage)); geo.setAttribute('aAlpha', new T.BufferAttribute(al, 1).setUsage(T.DynamicDrawUsage)); geo.setAttribute('aSize', new T.BufferAttribute(sz, 1).setUsage(T.DynamicDrawUsage));
+  const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uScale: { value: 1 } },
+    vertexShader: 'attribute float aAlpha;attribute float aSize;uniform float uScale;varying float vA;void main(){vA=aAlpha;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);gl_PointSize=aSize*uScale;}',
+    fragmentShader: 'varying float vA;void main(){float d=length(gl_PointCoord-.5)*2.;if(d>1.)discard;float a=pow(1.-d,1.8)*vA;if(a<.004)discard;gl_FragColor=vec4(mix(vec3(.42,.58,.66),vec3(.80,.89,.93),pow(1.-d,2.)),a);}' });
+  const pts = new T.Points(geo, m); pts.frustumCulled = false; pts.renderOrder = 8; scene.add(pts);
+  const parts = Array.from({ length: n }, () => ({ age: Math.random(), life: 1.6 + Math.random() * 1.2, live: false }));
+  plumes.push({ o: P(x, y, PIPE_Y + 6), d: new T.Vector3(dx, 0, dy).normalize(), key, pos, al, sz, geo, mat: m, pts, parts, level: 0 });
+}
+function plumeUpdate(pl, dt, q) {
+  pl.level += ((q > 1 ? Math.min(1, .75 + q / 700) : 0) - pl.level) * Math.min(1, dt * 2);
+  pl.mat.uniforms.uScale.value = pxPerUnit * renderer.getPixelRatio(); pl.pts.visible = pl.level > .01;
+  if (!pl.pts.visible) return;
+  const side = new T.Vector3(-pl.d.z, 0, pl.d.x);
+  for (let i = 0; i < pl.parts.length; i++) {
+    const p = pl.parts[i]; p.age += dt / p.life;
+    if (p.age >= 1) { p.age %= 1; p.live = Math.random() < pl.level; p.sp = .75 + Math.random() * .5; p.sw = (Math.floor(Math.random() * 5) - 2) / 2 + (Math.random() - .5) * .12; p.up = Math.random(); p.ph = Math.random() * 6.28; }   // five jets
+    if (!p.live) { pl.al[i] = 0; continue; }
+    const t = p.age, run = (1 - Math.pow(1 - t, 1.6)) * 230 * p.sp, spread = 10 + t * 60;   // fast at the mouth, slowing as it mixes
+    const q3 = pl.o.clone().addScaledVector(pl.d, run).addScaledVector(side, p.sw * spread + Math.sin(t * 5 + p.ph) * 2);
+    pl.pos[i * 3] = q3.x; pl.pos[i * 3 + 1] = q3.y + p.up * 10; pl.pos[i * 3 + 2] = q3.z;
+    pl.sz[i] = 12 + t * 30; pl.al[i] = pl.level * .95 * Math.min(1, t / .06) * Math.pow(1 - t, 1.2);
+  }
+  pl.geo.attributes.position.needsUpdate = pl.geo.attributes.aAlpha.needsUpdate = pl.geo.attributes.aSize.needsUpdate = true;
 }
 // flat arrows on the floor showing air entering / leaving the circuit
 const arrows = [];
@@ -331,13 +360,14 @@ function burner(id, key, x, y, title) {
 }
 function diamond(x, y, kind) {
   const top = canvasTexture(128, (c, s) => {
-    c.fillStyle = kind === 'cool' ? '#4e94c4' : '#5d6b72'; c.fillRect(0, 0, s, s);
+    c.fillStyle = kind === 'cool' ? '#4e94c4' : '#ffffff'; c.fillRect(0, 0, s, s);
     if (kind === 'cool') { c.strokeStyle = 'rgba(255,255,255,.6)'; c.lineWidth = 4; for (let i = 1; i < 7; i++) { c.beginPath(); c.moveTo(i * s / 7, 8); c.lineTo(i * s / 7, s - 8); c.stroke(); } }
-    else { c.fillStyle = '#e9f3f7'; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(s * (.15 + i * .0875), s * (.15 + i * .0875), 4, 0, 7); c.fill(); } }
+    else { c.fillStyle = '#1d2327'; for (let i = 0; i < 9; i++) { c.beginPath(); c.arc(s * (.15 + i * .0875), s * (.15 + i * .0875), 4, 0, 7); c.fill(); } }
   });
-  const side = new T.MeshStandardMaterial({ color: kind === 'cool' ? '#2f6f9e' : '#46525a', metalness: .5, roughness: .4 });
-  const b = new T.Mesh(new T.BoxGeometry(68, 40, 68), [side, side, new T.MeshStandardMaterial({ map: top, metalness: .3, roughness: .5 }), side, side, side]);
+  const side = new T.MeshStandardMaterial({ color: kind === 'cool' ? '#2f6f9e' : '#46525a', metalness: .5, roughness: .4 }), face = new T.MeshStandardMaterial({ map: top, metalness: .3, roughness: .5 });
+  const b = new T.Mesh(new T.BoxGeometry(68, 40, 68), [side, side, face, side, side, side]);
   b.rotation.y = Math.PI / 4; b.position.copy(P(x, y, PIPE_Y)); scene.add(b);
+  return { side, face };
 }
 function louvre(x, y, dir) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); g.rotation.y = -{ r: 0, l: Math.PI }[dir]; scene.add(g);
@@ -468,9 +498,11 @@ blower('bg', 650, 880, 100, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => 
   pipe('fg', 'bg', 'qgRoom', [[560, 825], [560, 880]], 'room');
   junction('GJ', P(560, 880, PIPE_Y), 13);                                        // tee where the galley flap line joins the suction
   pipe('bg', 'galley', 'qg', [[fx, fy, fh], [ax, ay, ah], [780, ay, ah]], 'dirty');   // straight right to the galley
+  plume(782, ay, 1, 0, 'qg');
   arrow(830, ay, 'r', 'dirty', 'qg', 2, 26);
 });
-diamond(385, 760, 'filter'); diamond(910, 512, 'cool');
+const filterBox = diamond(385, 760, 'filter'); diamond(910, 512, 'cool');
+const FILTER_IDLE = new T.Color('#8e9ca3'), filterCol = FILTER_IDLE.clone();
 { // 101 · H₂ sensor, as drawn ( –⊏‖–| ): a stub off the pipe, a flange pair, the sensor cup opening outward, a short tail
   const dark = new T.MeshStandardMaterial({ color: '#2f383d', metalness: .5, roughness: .45 }), y = 890, h = PIPE_Y;
   const bar = (x0, x1, r, m) => { const c = new T.Mesh(new T.CylinderGeometry(r, r, Math.abs(x1 - x0), 12), m); c.rotation.z = Math.PI / 2; c.position.copy(P((x0 + x1) / 2, y, h)); scene.add(c); };
@@ -488,7 +520,7 @@ wire([[845, 512], [845, 345], [877, 345]]); wire([[917, 345], [950, 345], [950, 
 const vDial = dial(897, 345, 'V');
 [[580, 585], [745, 585], [845, 512], [950, 512]].forEach(([x, y]) => boss(x, y));
 probe(755, 440); probe(770, 585); probe(990, 512);                               // thermocouples (TC)
-checkValve(1595, 1020); openEnd(300, 300, 0); openEnd(625, 750, Math.PI / 2);
+checkValve(1595, 1020);
 // small fittings on the lines, as drawn: ╤ test points, the joint / nipple / flexible joint on the 122 line, ▲ on the riser
 function testPoint(x, y) { const g = new T.Group(); g.position.copy(P(x, y - 22, PIPE_Y + 10)); scene.add(g); g.add(new T.Mesh(new T.BoxGeometry(2.5, 3, 12), mat.dark)); for (const z of [-6, -11]) { const b = new T.Mesh(new T.BoxGeometry(14, 3, 2.5), mat.dark); b.position.z = z; g.add(b); } }
 [[445, 440], [455, 585], [728, 440], [740, 585], [1468, 450], [1498, 450], [1563, 450]].forEach(([x, y]) => testPoint(x, y));
@@ -497,6 +529,7 @@ for (const o of [-5, 5]) { const d = new T.Mesh(new T.CylinderGeometry(17, 17, 3
 for (const o of [-6, 0, 6]) { const r = new T.Mesh(new T.TorusGeometry(15, 2, 8, 24), mat.dark); r.position.copy(P(385, 842 + o, PIPE_Y)); scene.add(r); }   // {⊢
 { const t = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-13, -10), new T.Vector2(13, -10), new T.Vector2(0, 14)])), new T.MeshBasicMaterial({ color: '#5d6b72' })); t.rotation.x = -Math.PI / 2; t.position.copy(P(270, 630, PIPE_Y + 18)); scene.add(t); }   // ▲
 louvre(1645, 450, 'r'); louvre(1690, 790, 'l');
+plume(60, 360, -1, 0, 'draught'); plume(1665, 450, 1, 0, 'toCompt');
 arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet'); arrow(30, 360, 'l', 'dirty', 'draught', 1);
 arrow(680, 750, 'l', 'room', 'qgRoom', 1); arrow(365, 345, 'l', 'room', 'draught', 1);
 arrow(360, 1345, 'l', 'dirty', 'out', 2, 40); arrow(1600, 1285, 'l', 'room', 'pitIn', 2, 40);
@@ -681,6 +714,9 @@ function frame(now) {
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
   thermo[0](EST.ambient); thermo[1](S.pit.Tb); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler
+  filterCol.lerp(!S.running ? FILTER_IDLE : S.open.v122 ? LAMP_ON : LAMP_OFF, Math.min(1, dt * 6));
+  filterBox.face.color.copy(filterCol); filterBox.side.color.copy(filterCol).multiplyScalar(.7);
+  for (const pl of plumes) plumeUpdate(pl, dt, flowOf(pl.key));
   for (const s of haze) s.material.opacity = S.running ? Math.min(.75, .08 + S.pit.h2 / 4 * .67) : 0;
   const gas = S.running ? .7 : 0;                                   // cells gassing: plenty of bubbles in the electrolyte
   for (const { b, sc } of batteries) b.update(dt, gas, px * sc);

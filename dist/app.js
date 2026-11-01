@@ -44,9 +44,9 @@ const AUTO_SET=.45,DIAL_MAX=.6,pgLabels={};
 const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(handActive(side)?b.value:autoOut(side)):0};
 function dialFace(c,size){const k0=size/256;c.save();c.scale(k0,k0);c.strokeStyle='#477262';c.fillStyle='#477262';c.lineWidth=2;c.textAlign='center';c.font='bold 17px Arial';for(let k=0;k<=12;k++){const a=(135+k*22.5)*Math.PI/180,r1=k%2?88:82;c.beginPath();c.moveTo(128+96*Math.cos(a),128+96*Math.sin(a));c.lineTo(128+r1*Math.cos(a),128+r1*Math.sin(a));c.stroke();if(k%2===0)c.fillText((k*.05).toFixed(1),128+66*Math.cos(a),134+66*Math.sin(a))}c.font='14px Arial';c.fillText('kg/cm²',128,184);c.restore()}
 let viewMode='top';
-let flowing=false,selected=null,labelVisible=false;document.querySelector('#circuit').classList.add('hide-labels');const parts=new Map(),labelNodes=[],hotspots=[],wheels={},needles={},bodyGroups={};
+let flowing=false,selected=null,labelVisible=false;document.querySelector('#circuit').classList.add('hide-labels');const parts=new Map(),labelNodes=[],hotspots=[],infoNodes={},wheels={},needles={},bodyGroups={};
 function label(text,x,z,align='left',sub='',classes=''){const el=document.createElement('div');el.className='drawing-label '+align+' '+classes;const strong=document.createElement('span');strong.textContent=text;el.append(strong);if(sub){const sm=document.createElement('small');sm.textContent=sub;el.append(sm)}labelsRoot.append(el);labelNodes.push({el,x,z});return el}
-function part(id,type,side,x,z,title,size=108){const g=new T.Group();g.position.copy(pos(x,z));scene.add(g);const data={id,type,side,x,z,title,group:g,size};parts.set(id,data);bodyGroups[id]=g;const b=document.createElement('button');b.className='part-button';b.dataset.part=id;b.setAttribute('aria-label',title);b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{select(id);if(type==='shutoff'||type==='auto'||type==='hand')tapSwitch(side,type)});if(type==='safety')b.addEventListener('click',()=>{if(!circuitOn(side))circuitWarning(side)});if(['shutoff','auto','hand'].includes(type))b.style.minWidth=b.style.minHeight='44px';   // stacked parts: areas must not overlap
+function part(id,type,side,x,z,title,size=108){const g=new T.Group();g.position.copy(pos(x,z));scene.add(g);const data={id,type,side,x,z,title,group:g,size};parts.set(id,data);bodyGroups[id]=g;const b=document.createElement('button');b.className='part-button';b.dataset.part=id;b.setAttribute('aria-label',title);b.setAttribute('aria-pressed','false');b.addEventListener('click',()=>{select(id);if(type==='shutoff'||type==='auto'||type==='hand')tapSwitch(side,type)});if(type==='safety')b.addEventListener('click',()=>{if(!circuitOn(side))circuitWarning(side)});if(['shutoff','auto','hand','filter','pg','safety'].includes(type))b.style.minWidth=b.style.minHeight='44px';   // stacked parts: areas must not overlap
  labelsRoot.append(b);hotspots.push({el:b,x,z,size});return g}
 function squareSymbol(g,symbol){box(g,112,112,25,mat.edge,0,-3);box(g,101,101,27,mat.white,0,0);if(symbol==='V')line(g,[[-45,32,-44],[0,32,44],[45,32,-44]]);else{line(g,[[-44,32,-44],[44,32,44]]);line(g,[[44,32,-44],[-44,32,44]])}}
 function gauge(g,side){cyl(g,56,19,mat.metal,0,6);cyl(g,49,3,mat.white,0,17);const cv=document.createElement('canvas');cv.width=256;cv.height=256;const c=cv.getContext('2d');c.clearRect(0,0,256,256);c.strokeStyle='#477262';c.fillStyle='#477262';dialFace(c,256);const tex=new T.CanvasTexture(cv);tex.colorSpace=T.SRGBColorSpace;const face=mesh(g,new T.PlaneGeometry(98,98),new T.MeshBasicMaterial({map:tex,transparent:true,depthWrite:false}),0,20);face.rotation.x=-Math.PI/2;const needle=new T.Group();needle.position.y=24;g.add(needle);line(needle,[[0,0,0],[0,0,-36]],mat.ink,2.5);cyl(needle,5,3,mat.ink);needles[side]=needle}
@@ -62,14 +62,14 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  pipe([[x,353],[x,401]],side);g=part(side+'-auto','auto',side,x,460,'Automatic reducer · '+B,92);squareSymbol(g,'V');label('Auto Reducer',x+inner*90,455,P?'left':'right','0.45 kg/cm²');
  pipe([[x,517],[x,584]],side);g=part(side+'-hand','hand',side,x,642,'Hand reducer · '+B,96);squareSymbol(g,'X');handWheel(g,side);label('Hand Reducer',x+inner*90,638,P?'left':'right','0.13–0.16 kg/cm²');
  // Separate accessible target for the outboard handwheel, without rotating the body.
- const h=document.createElement('button');h.className='part-button';h.setAttribute('aria-label','Inspect '+B+' side adjustment handle');h.onclick=()=>{select(side+'-hand');tapSwitch(side,'hand')};labelsRoot.append(h);hotspots.push({el:h,x:x+out*87,z:642,size:66});
- pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,130);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
- pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,110);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
+ const h=document.createElement('button');h.className='part-button';h.setAttribute('aria-label','Inspect '+B+' side adjustment handle');h.onclick=()=>{select(side+'-hand');tapSwitch(side,'hand')};labelsRoot.append(h);h.style.minWidth=h.style.minHeight='44px';hotspots.push({el:h,x:x+out*124,z:642,size:68});
+ pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,80);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
+ pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,80);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
  g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x+(P?-60:60),1333,'center','0.2 kg/cm²');
  g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center');
  // "i" beside the 3D battery opens the transparent battery with bubble physics.
- {const info=document.createElement('button');info.className='battery-info';info.textContent='i';info.setAttribute('aria-label','Battery details · '+B);info.onclick=()=>openBattery(side);labelsRoot.append(info);labelNodes.push({el:info,x:cellX+(P?120:-120),z:1310})}
+ {const info=document.createElement('button');info.className='battery-info';info.textContent='i';info.setAttribute('aria-label','Battery details · '+B);info.onclick=()=>openBattery(side);labelsRoot.append(info);labelNodes.push(infoNodes[side]={el:info,x:cellX+(P?120:-120),z:1310})}
  const inletX=cellX+(P?-132:132);
  pipe([[inletX,1080],[inletX,1222],[inletX,1252,68]],side,'battery',8);
  // Additional manifold outlet stubs indicate the drawing's distribution rail.
@@ -77,7 +77,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
 }
 // Drawing boundary, behind the components.
 const boundaryGeo=new T.BufferGeometry().setFromPoints([pos(100,1020,1),pos(1710,1020,1)]);const boundary=new T.Line(boundaryGeo,new T.LineDashedMaterial({color:'#adc1b1',dashSize:18,gapSize:14}));boundary.computeLineDistances();scene.add(boundary);label('BATTERY PIT',888,1050,'center','','muted');
-part('main-pipe','pipe','common',1120,185,'Transparent air pipe',150);
+part('main-pipe','pipe','common',1120,185,'Transparent air pipe',150);{const pb=hotspots.pop();pb.el.remove()};
 network.finalize();
 
 const notes={pipe:'Transparent pipe walls reveal the internal air passage and moving air particles. The pipe route stays fixed. Shared junctions have continuous hollow bores and the tube ends meet the component ports.',shutoff:'Isolates this branch. The top cross is the shut-off symbol from your drawing.',auto:'Square top with the V symbol only. The component body and symbol stay fixed.',hand:'Square top with an X symbol. Only the outboard side adjustment handle rotates when adjusted.',filter:'A solid, shallow diamond body reproduces the exact filter symbol in plan.',pg:'The dial faces straight up so the reading stays visible in the locked top view.',safety:'Uses the perforated circular part you supplied for the safety-valve position. The yellow cap belongs on the battery lid.',battery:'The lid follows your battery photo: two rows of six terminal positions, red and yellow caps, a clear cap, and the air connection in the existing lid opening.'};
@@ -143,7 +143,7 @@ document.querySelector('#reference').onclick=()=>document.querySelector('#refere
 document.querySelector('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{document.querySelector('#fullscreen').textContent='Use browser full screen'}};document.addEventListener('fullscreenchange',()=>document.querySelector('#fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen');
 // No OrbitControls, drag handlers, zoom or camera animation. Resize only fits the same plan.
 function screenPoint(x,z){const v=pos(x,z,45).project(camera);const r=host.getBoundingClientRect(),parent=circuit.getBoundingClientRect();return {x:r.left-parent.left+(v.x+1)*r.width/2,y:r.top-parent.top+(1-v.y)*r.height/2}}
-function layout(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h;const planW=1900,planH=1490;const height=Math.max(planH,planW/aspect);camera.left=-height*aspect/2;camera.right=height*aspect/2;camera.top=height/2;camera.bottom=-height/2;camera.updateProjectionMatrix();camera.updateMatrixWorld();renderer.setSize(w,h);for(const l of labelNodes){const p=screenPoint(l.x,l.z);l.el.style.left=p.x+'px';l.el.style.top=p.y+'px'}for(const l of hotspots){const p=screenPoint(l.x,l.z),size=l.size*w/(height*aspect);Object.assign(l.el.style,{left:p.x+'px',top:p.y+'px',width:size+'px',height:size+'px'})}}
+function layout(){const w=host.clientWidth,h=host.clientHeight,aspect=w/h;const planW=1900,planH=1490;const height=Math.max(planH,planW/aspect);camera.left=-height*aspect/2;camera.right=height*aspect/2;camera.top=height/2;camera.bottom=-height/2;camera.updateProjectionMatrix();camera.updateMatrixWorld();renderer.setSize(w,h);for(const l of labelNodes){const p=screenPoint(l.x,l.z);l.el.style.left=p.x+'px';l.el.style.top=p.y+'px'}for(const l of hotspots){const p=screenPoint(l.x,l.z),k=w/(height*aspect),size=l.size*k;Object.assign(l.el.style,{left:p.x+'px',top:p.y+'px',width:size+'px',height:(l.h||l.size)*k+'px'})}}
 if('ResizeObserver' in window)new ResizeObserver(layout).observe(host);else window.addEventListener('resize',layout);host.addEventListener('wheel',e=>e.preventDefault(),{passive:false});host.addEventListener('contextmenu',e=>e.preventDefault());
 // Load the actual assembled Blender scene. The earlier layout geometry is hidden.
 let actualModelReady=false,nativeAir=null,nativeAirFrames=[],nativeAirPhase=0;const nativeReleaseStreaks=[];
@@ -392,6 +392,15 @@ function topBattery(side,box,centre,S,parts){
  const hose=new T.Mesh(new T.TubeGeometry(curve,96,3.4,14,false),hoseMaterial);scene.add(hose);
  parts.forEach((p,k)=>{const n=p.frames.length;p.framesTop=Array.from({length:n},(_,f)=>curve.getPointAt(((f/n)+k/parts.length)%1).toArray())});
  topBatteries.push({side,b,hose,sc});
+ // touch area fitted to this cell (plan coordinates are world + (900, 750)); replaces the old shared battery box
+ const old=hotspots.findIndex(h=>h.el.dataset.part===side+'-battery'&&!h.cell);if(old>=0){hotspots[old].el.remove();hotspots.splice(old,1)}
+ const bb=new T.Box3().setFromObject(b.group),bc=bb.getCenter(new T.Vector3()),el=document.createElement('button');
+ el.className='part-button';el.style.minWidth=el.style.minHeight='44px';el.dataset.part=side+'-battery';el.setAttribute('aria-label','Battery cell · '+(side==='port'?'Port':'STBD'));el.setAttribute('aria-pressed','false');el.addEventListener('click',()=>select(side+'-battery'));
+ document.querySelector('#labels').append(el);hotspots.push({el,x:bc.x+900,z:bc.z+750,size:(bb.max.x-bb.min.x)*.66,h:(bb.max.z-bb.min.z)*.8,cell:true});   // the cell body, not the hose or lid fittings
+ // i just outside the pair, on the inboard side, level with the top of the cells
+ const mine=topBatteries.filter(t=>t.side===side).map(t=>new T.Box3().setFromObject(t.b.group)),u=mine.reduce((a,c)=>a.union(c),new T.Box3()),inf=infoNodes[side];
+ if(inf){inf.x=(side==='port'?u.max.x+20:u.min.x-20)+900;inf.z=u.min.z+30+750}
+ layout();
 }
 function applyBatteryView(){
  const top=viewMode!=='front';

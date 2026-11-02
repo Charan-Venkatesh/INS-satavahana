@@ -175,8 +175,8 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
   const coreMat = new T.ShaderMaterial({ transparent: true, depthWrite: false,
     uniforms: { uColor: { value: AIR[air].clone() }, uAlpha: { value: 0 }, uReach: { value: 0 }, uPhase: { value: Math.random() }, uLen: { value: len } },
     vertexShader: 'varying float vU;void main(){vU=uv.x;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-    fragmentShader: 'uniform vec3 uColor;uniform float uAlpha;uniform float uReach;uniform float uPhase;uniform float uLen;varying float vU;void main(){if(vU>uReach)discard;float x=fract(vU*uLen/120.-uPhase);float b=.5+.5*sin(x*6.2832);float a=uAlpha*(.32+.1*b);gl_FragColor=vec4(mix(uColor,vec3(.72,.86,1.),.55+.1*b),a);}' });
-  const core = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r * .8, 12, false), coreMat); core.renderOrder = 3; scene.add(core); core.visible = false;
+    fragmentShader: 'uniform vec3 uColor;uniform float uAlpha;uniform float uReach;uniform float uPhase;uniform float uLen;varying float vU;void main(){if(vU>uReach)discard;float x=fract(vU*uLen/60.-uPhase);float band=smoothstep(0.,.25,x)*(1.-smoothstep(.45,.75,x));vec3 deep=vec3(.03,.16,.55);gl_FragColor=vec4(mix(deep,deep*.45,band),uAlpha*(.62+.3*band));}' });
+  const core = new T.Mesh(new T.TubeGeometry(path, Math.max(16, Math.round(len / 6)), r * .72, 12, false), coreMat); core.renderOrder = 3; scene.add(core); core.visible = false;   // dark-blue flow band
   const N = Math.max(8, Math.round(len / 4)), lut = path.getSpacedPoints(N - 1), nb = Math.max(3, Math.round(len / (r > 9 ? 16 : 22)));
   const bpos = new Float32Array(nb * 3), bal = new Float32Array(nb), bsz = new Float32Array(nb), bgeo = new T.BufferGeometry();
   bgeo.setAttribute('position', new T.BufferAttribute(bpos, 3).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aAlpha', new T.BufferAttribute(bal, 1).setUsage(T.DynamicDrawUsage)); bgeo.setAttribute('aSize', new T.BufferAttribute(bsz, 1));
@@ -202,8 +202,8 @@ function pipeUpdate(p, dt, q, color, px, now) {
   const u = p.mat.uniforms; u.uAlpha.value = p.show; u.uReach.value = p.fill; u.uColor.value.copy(color);
   u.uPhase.value += dt * (flowing ? .2 + 1 * Math.min(1.5, q / 600) : 0);
   p.streams.visible = p.show > .01;
-  const cu = p.coreMat.uniforms; cu.uAlpha.value = p.show; cu.uReach.value = p.fill; cu.uColor.value.copy(color); p.core.visible = p.streams.visible;   // faint tint under the trails
-  cu.uPhase.value += dt * (flowing ? .25 + 1.1 * Math.min(1.5, q / 600) : 0);       // pulses travel with the flow; still when blocked
+  const cu = p.coreMat.uniforms; cu.uAlpha.value = p.show; cu.uReach.value = p.fill; cu.uColor.value.copy(color); p.core.visible = p.streams.visible;   // the dark-blue flow, clear on large displays
+  cu.uPhase.value += dt * (flowing ? .5 + .9 * Math.min(1.5, q / 600) : 0);       // pulses travel with the flow; still when blocked
   // bubbles ride the flow; where the air is blocked they drift slowly up to the closed part
   const b = p.bmat.uniforms; b.uAlpha.value = p.show; b.uScale.value = px; b.uColor.value.copy(color); p.bpts.visible = false;
   if (false) {

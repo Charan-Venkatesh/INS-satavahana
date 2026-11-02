@@ -216,6 +216,12 @@ function buildStreamlines(){
     u+=L}
    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('aU',new T.Float32BufferAttribute(us,1));g.setAttribute('aSeed',new T.Float32BufferAttribute(seeds,1));
    group.add(new T.Line(g,mat))}
+  // dark-blue flow band inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
+  const band=new T.ShaderMaterial({transparent:true,depthWrite:false,uniforms:mat.uniforms,
+   vertexShader:'varying float vU;uniform float uLen;void main(){vU=uv.x*uLen;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;void main(){if(vU/uLen>uReach)discard;float x=fract(vU/60.-uPhase*.35);float b=smoothstep(0.,.25,x)*(1.-smoothstep(.45,.75,x));vec3 deep=vec3(.03,.16,.55);float a=min(1.,uAlpha)*(.62+.3*b);if(a<.01)discard;gl_FragColor=vec4(mix(deep,deep*.45,b),a);}'});
+  const curve=new T.CurvePath();for(let i=1;i<P.length;i++)if(P[i].distanceTo(P[i-1])>.01)curve.add(new T.LineCurve3(P[i-1],P[i]));
+  if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(8,curve.curves.length*4),sec.rad*.72,12,false),band);tube.renderOrder=3;tube.frustumCulled=false;group.add(tube)}
   sec.branch=branch;sec.mat=mat;
  }
 }

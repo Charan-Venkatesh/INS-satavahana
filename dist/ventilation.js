@@ -18,7 +18,9 @@ const LAMP_IDLE = new T.Color('#8e9ca3'),   // light backdrop: idle rings in gre
       LAMP_OFF = new T.Color('#d23b33'), LAMP_ON = new T.Color('#22b45a');
 
 // ---------------------------------------------------------------- renderer, camera, light
-function sharpRatio() { return Math.min(4, (devicePixelRatio || 1) * (window.visualViewport?.scale || 1)); }
+// phones and tablets (touch, coarse pointer) render at most 2× so the scene fits in their graphics memory
+const PHONE = matchMedia('(pointer: coarse)').matches;
+function sharpRatio() { return Math.min(PHONE ? 2 : 4, (devicePixelRatio || 1) * (window.visualViewport?.scale || 1)); }
 const renderer = new T.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(sharpRatio()); renderer.outputColorSpace = T.SRGBColorSpace;
 renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
@@ -99,10 +101,22 @@ const BLOWERS = new Set(['b1', 'b2', 'bg']);
 // clear glass right through tees and bends (no metal balls or sleeves).
 const steel = new T.MeshStandardMaterial({ color: '#c4cbd0', metalness: .95, roughness: .28 }), boltMat = new T.MeshStandardMaterial({ color: '#4a5156', metalness: .9, roughness: .35 });
 const UP = new T.Vector3(0, 1, 0);
+// every flange ring and bolt is one instance of two shared meshes (two draw calls in all), rebuilt when flanges are added
+const FLANGE_RING = new T.CylinderGeometry(1.5, 1.5, .34, 32), FLANGE_BOLT = new T.CylinderGeometry(.13, .13, .62, 10), flangeRings = [], flangeBolts = [];
+let flangeMeshes = null;
 function flange(at, dir, r) {
-  const g = new T.Group(); g.position.copy(at); g.quaternion.setFromUnitVectors(UP, dir.clone().normalize()); scene.add(g);
-  g.add(new T.Mesh(new T.CylinderGeometry(r * 1.5, r * 1.5, r * .34, 32), steel));
-  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2, b = new T.Mesh(new T.CylinderGeometry(r * .13, r * .13, r * .62, 10), boltMat); b.position.set(Math.cos(a) * r * 1.26, 0, Math.sin(a) * r * 1.26); g.add(b); }
+  const q = new T.Quaternion().setFromUnitVectors(UP, dir.clone().normalize()), s = new T.Vector3(r, r, r);
+  flangeRings.push(new T.Matrix4().compose(at, q, s));
+  for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; flangeBolts.push(new T.Matrix4().compose(at.clone().add(new T.Vector3(Math.cos(a) * r * 1.26, 0, Math.sin(a) * r * 1.26).applyQuaternion(q)), q, s)); }
+  flangeMeshes = null;
+}
+function buildFlanges() {
+  for (const [geo, matl, list, i] of [[FLANGE_RING, steel, flangeRings, 0], [FLANGE_BOLT, boltMat, flangeBolts, 1]]) {
+    const old = buildFlanges.meshes?.[i]; if (old) { scene.remove(old); old.dispose(); }
+    const m = new T.InstancedMesh(geo, matl, list.length); list.forEach((x, k) => m.setMatrixAt(k, x)); m.frustumCulled = false; scene.add(m);
+    (buildFlanges.meshes ||= [])[i] = m;
+  }
+  flangeMeshes = buildFlanges.meshes;
 }
 // shine: an additive reflection layer over the glass (as on screen 1) so the pipes keep bright highlight streaks
 const shineMat = new T.MeshPhysicalMaterial({ color: '#000000', roughness: .02, metalness: 0, envMapIntensity: 1.1, transparent: true, blending: T.AdditiveBlending, depthWrite: false });
@@ -116,7 +130,7 @@ function trimEnds(pts, a, b) {
 }
 const chevronShape = new T.Shape([new T.Vector2(-9, -11), new T.Vector2(3, 0), new T.Vector2(-9, 11), new T.Vector2(-3, 0)]);
 // from / to: node names; key: which flow (m³/h) it carries; air: 'dirty' (pit air with H₂), 'clean' (treated) or 'room'
-const hoseMat = new T.MeshPhysicalMaterial({ color: '#efe4b8', roughness: .12, transmission: .35, thickness: 3, transparent: true, opacity: .85, side: T.DoubleSide });   // screen 1 battery hose
+const hoseMat = new T.MeshPhysicalMaterial({ color: '#efe4b8', roughness: .12, transmission: PHONE ? 0 : .35, thickness: 3, transparent: true, opacity: .85, side: T.DoubleSide });   // no transmission pass on phones   // screen 1 battery hose
 function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
   if (!curve) pts = trimEnds(pts, FACE[from] || 0, FACE[to] || 0);
   const path = curve || roundedPath(pts), len = path.getLength();
@@ -136,7 +150,7 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
     uniforms: { uPhase: { value: Math.random() * 10 }, uAlpha: { value: 0 }, uReach: { value: 0 }, uLen: { value: len }, uColor: { value: AIR[air].clone() } },
     vertexShader: 'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
     fragmentShader: 'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.3+.7*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.5,head*.6),a);}' });
-  const streams = new T.Group(); scene.add(streams);
+  const streams = new T.Group(); scene.add(streams); const sPos = [], sU = [], sSeed = [];
   const pts3 = path.getSpacedPoints(Math.max(4, Math.ceil(len / 5))), K = r > 9 ? 22 : 8;   // as circuit 1 (22 trails per pipe)
   for (let k = 0; k < K; k++) {
     const seed = (k * 37 % K) / K, ang0 = k / K * Math.PI * 2, rr = r * (.25 + .55 * ((k * 53 % 97) / 97)), pos = [], us = [], seeds = [];
@@ -146,9 +160,12 @@ function pipe(from, to, key, pts, air, { r = 13, curve = null } = {}) {
       const uu = len * i / (pts3.length - 1), ang = ang0 + uu * .02, q = pts3[i].clone().addScaledVector(n1, Math.cos(ang) * rr).addScaledVector(n2, Math.sin(ang) * rr);
       pos.push(q.x, q.y, q.z); us.push(uu); seeds.push(seed);
     }
-    const g = new T.BufferGeometry(); g.setAttribute('position', new T.Float32BufferAttribute(pos, 3)); g.setAttribute('aU', new T.Float32BufferAttribute(us, 1)); g.setAttribute('aSeed', new T.Float32BufferAttribute(seeds, 1));
-    const line = new T.Line(g, m); line.renderOrder = 4; line.frustumCulled = false; streams.add(line);
+    for (let i = 1; i < us.length; i++) {                        // as segments, so all of a pipe's trails share one draw call
+      sPos.push(pos[i * 3 - 3], pos[i * 3 - 2], pos[i * 3 - 1], pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]); sU.push(us[i - 1], us[i]); sSeed.push(seed, seed);
+    }
   }
+  const sg = new T.BufferGeometry(); sg.setAttribute('position', new T.Float32BufferAttribute(sPos, 3)); sg.setAttribute('aU', new T.Float32BufferAttribute(sU, 1)); sg.setAttribute('aSeed', new T.Float32BufferAttribute(sSeed, 1));
+  const lines = new T.LineSegments(sg, m); lines.renderOrder = 4; lines.frustumCulled = false; streams.add(lines);
   let chevron = null;                                                // direction arrow in the middle of the pipe
   if (len > 70) {
     chevron = new T.Mesh(new T.ShapeGeometry(chevronShape), new T.MeshBasicMaterial({ color: AIR[air], transparent: true, opacity: 0, depthWrite: false }));
@@ -679,6 +696,7 @@ const tmpC = new T.Color();
 const flowOf = key => typeof key === 'function' ? key(flows) : key === 'pitIn' ? flows.inlet + flows.recirc : key === 'out' ? flows.out : flows[key] || 0;
 let last = 0;
 function frame(now) {
+  if (!flangeMeshes) buildFlanges();
   const dt = Math.min(.05, Math.max(0, last ? (now - last) / 1000 : .016)); last = Math.max(last, now);
   for (const p of parts.values()) if (p.type === 'blower') {                         // spin up / coast down
     const target = S.on[p.key] ? S.set[p.key] : 0, tau = target > p.speed ? SPIN_UP_S : COAST_S;
@@ -730,3 +748,6 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
+// leaving the screen frees its graphics memory at once (phones keep the previous page alive otherwise)
+addEventListener('pagehide', () => { renderer.dispose(); renderer.forceContextLoss(); });
+addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // coming back to it: rebuild

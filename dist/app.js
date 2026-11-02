@@ -45,7 +45,8 @@ const SUPPLY=45,passes=side=>branches[side].open,autoOut=side=>branches[side].au
 const AUTO_SET=.45,DIAL_MAX=.6,pgLabels={};
 const pgValue=side=>{const b=branches[side];return flowing&&passes(side)?(handActive(side)?b.value:autoOut(side)):0};
 // Render density for crisp dials: the screen's pixel density × any pinch zoom, capped at 4×.
-function sharpRatio(){return Math.min(4,(devicePixelRatio||1)*(window.visualViewport?.scale||1))}
+const PHONE=matchMedia('(pointer: coarse)').matches;   // phones render at most 2× so the scene fits in their graphics memory
+function sharpRatio(){return Math.min(PHONE?2:4,(devicePixelRatio||1)*(window.visualViewport?.scale||1))}
 window.visualViewport?.addEventListener('resize',()=>{if(typeof layout==='function')layout()});
 function dialFace(c,size,value=null){const k0=size/256;c.clearRect(0,0,size,size);c.save();c.scale(k0,k0);c.strokeStyle='#1f3a33';c.fillStyle='#1f3a33';c.lineWidth=2.4;c.textAlign='center';c.font='bold 19px Arial';for(let k=0;k<=12;k++){const a=(135+k*22.5)*Math.PI/180,r1=k%2?88:82;c.beginPath();c.moveTo(128+96*Math.cos(a),128+96*Math.sin(a));c.lineTo(128+r1*Math.cos(a),128+r1*Math.sin(a));c.stroke();if(k%2===0)c.fillText((k*.05).toFixed(1),128+66*Math.cos(a),134+66*Math.sin(a))}c.font='bold 13px Arial';c.fillText('kg/cm²',128,190);
  if(value!==null){const over=value>DIAL_MAX;c.fillStyle='#f4f7f6';c.strokeStyle=over?'#c0392b':'#1f3a33';c.lineWidth=1.6;c.beginPath();c.roundRect(98,148,60,24,5);c.fill();c.stroke();c.fillStyle=over?'#c0392b':'#14302a';c.font='bold 16px Arial';c.fillText(over?value.toFixed(1):value.toFixed(3),128,169)}
@@ -339,7 +340,7 @@ function rerouteBatteryHoses(air){
   if(/^red[ _](cap|central)/.test(name)&&n.isMesh){caps[side].expandByObject(n);n.visible=false}
   if(/battery[ _]air[ _]hose/.test(name)&&n.isMesh){const p=n.geometry.attributes.position;let best=null;for(let i=0;i<p.count;i++){v.fromBufferAttribute(p,i).applyMatrix4(n.matrixWorld);if(!best||v.z<best.z)best=v.clone()}starts[side]=best;n.visible=false}
   if(/separate[ _]air[ _]hose[ _]lid[ _]socket/.test(name))n.visible=false});
- const rubber=new T.MeshStandardMaterial({color:'#1d1f21',roughness:.75}),hoseMat=new T.MeshPhysicalMaterial({color:'#efe4b8',roughness:.12,transmission:.55,thickness:3,transparent:true,opacity:.6,side:T.DoubleSide});
+ const rubber=new T.MeshStandardMaterial({color:'#1d1f21',roughness:.75}),hoseMat=new T.MeshPhysicalMaterial({color:'#efe4b8',roughness:.12,transmission:PHONE?0:.55,thickness:3,transparent:true,opacity:.6,side:T.DoubleSide});
  for(const side of ['port','stbd']){const box=caps[side],S=starts[side];if(box.isEmpty()||!S)continue;const c=box.getCenter(new T.Vector3()),lid=box.min.y;
   // black rubber nipple: washer, body, spout
   const nip=new T.Group();nip.position.set(c.x,lid,c.z);scene.add(nip);(flatBattery[side]??=[]).push(nip);
@@ -506,3 +507,6 @@ const chooser=document.querySelector('#component-select');for(const p of parts.v
 details();layout();requestAnimationFrame(animate);
 // Read-only state for touch-display verification and integrations.
 window.batteryAgitation={getState:()=>({selected,flowing,viewMode,labels:labelVisible,branches:JSON.parse(JSON.stringify(branches)),camera:{position:camera.position.toArray(),quaternion:camera.quaternion.toArray(),zoom:camera.zoom},parts:parts.size,pipes:pipes.length,actualBlenderModel:actualModelReady}),select,reset:()=>document.querySelector('#reset').click()};
+// leaving the screen frees its graphics memory at once (phones keep the previous page alive otherwise)
+if(webglAvailable)addEventListener('pagehide',()=>{renderer.dispose();renderer.forceContextLoss()});
+addEventListener('pageshow',e=>{if(e.persisted)location.reload()});   // coming back to it: rebuild

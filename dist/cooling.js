@@ -392,7 +392,7 @@ for (const [name, pit] of Object.entries(PITS)) {
 const PUMPS = new Set(['p1', 'p2']);
 function pump(id, cx, cy, mirror, title, connect) {
   const g = new T.Group(); scene.add(g);
-  const lg = new T.Group(); lg.position.copy(P(cx + (mirror ? 18 : -18), cy + 34, PIPE_Y + 40));   // status dot on the baseplate, motor end scene.add(lg);
+  const lg = new T.Group(); lg.position.copy(P(cx + (mirror ? 18 : -18), cy + 34, PIPE_Y + 40)); scene.add(lg);   // status dot on the baseplate, motor end
   const p = addPart(id, 'pump', cx, cy, title, 105, { key: id, rotor: null, speed: 0, angle: 0, group: g, lamp: lamp(lg, 9, 0) });
   loadPump().then(src => {
     const model = src.clone(true); g.add(model);
@@ -403,6 +403,9 @@ function pump(id, cx, cy, mirror, title, connect) {
     const c = box.getCenter(new T.Vector3()), want = P(cx, cy, PIPE_Y);
     g.position.add(new T.Vector3(want.x - c.x, PIPE_Y - box.max.y + 12, want.z - c.z)); g.updateMatrixWorld(true);
     p.rotor = model.getObjectByName('Shaft');
+    model.traverse(n => { if (/top_?bridge/i.test(n.name)) n.visible = false; });   // open lantern: the spinning coupling shows from above
+    p.base = g.position.clone();
+    const glow = sprite(glowTex, '#22b45a', 1, 0); glow.material.blending = T.NormalBlending; glow.scale.set(150, 90, 1); glow.position.copy(P(cx, cy, 0)); scene.add(glow); p.runGlow = glow;
     const plan = name => { const v = model.getObjectByName(name).getWorldPosition(new T.Vector3()); return [v.x + 1000, v.z + 786, v.y]; };
     connect(plan('Suction_Port'), plan('Discharge_Port'));
     layout();
@@ -651,17 +654,28 @@ for (const p of parts.values()) {
 const guideEl = document.createElement('div'); guideEl.id = 'next-step'; guideEl.setAttribute('role', 'status'); circuit.append(guideEl);
 { const st = document.createElement('style'); st.textContent = '#next-step{position:absolute;left:50%;bottom:16px;transform:translateX(-50%);z-index:19;max-width:92%;padding:12px 20px;border-radius:12px;background:#1f3a33ee;color:#fff;font:700 clamp(14px,1.1vw,30px)/1.35 system-ui;text-align:center;box-shadow:0 6px 24px #0005;pointer-events:none}#next-step.ok{background:#1f6f4aee}#next-step:empty{display:none}'; document.head.append(st); }
 function guide() {
-  let t = '', ok = false;
+  let t = '', ok = false, next = [];
+  const shut = ids => ids.filter(k => !o(k));
   if (!S.running) t = '▶ Press Start to switch the cooling circuit on.';
-  else if (!coolerPath()) t = 'Step 1 · Open a cooler: valves 35 and 40 (or 54 and 50) on the top line.';
-  else if (!o('v41') && !o('v49')) t = 'Step 2 · Open supply valve 41 (to III, E/R, M/R) or 49 (to F/E).';
-  else if (!o('v84') && !(o('v83') && o('v81'))) t = 'Step 3 · Open pump discharge valve 84 (above pump 40/15).';
-  else if (!S.on.p1 && !S.on.p2) t = 'Step 4 · Tap pump ' + (o('v84') ? '40/15' : '5/17') + ' to start it — the water starts flowing.';
-  else if (!pipes.some(p => p.flow && /^(ma|mb|ep|es|b3|v17|bf|v56)/.test(p.to))) t = 'Pump running · Open the branch valves (M/R, E/R, III, F/E) to send cooling water to them.';
+  else if (!coolerPath() && (next = shut(o('v54') || o('v50') ? ['v54', 'v50'] : ['v35', 'v40']))) t = 'Step 1 · Open a cooler: valves 35 and 40 (or 54 and 50) on the top line.';
+  else if (!o('v41') && !o('v49') && (next = ['v41'])) t = 'Step 2 · Open supply valve 41 (to III, E/R, M/R) or 49 (to F/E).';
+  else if (!o('v84') && !(o('v83') && o('v81')) && (next = ['v84'])) t = 'Step 3 · Open pump discharge valve 84 (above pump 40/15).';
+  else if (!S.on.p1 && !S.on.p2 && (next = [o('v84') ? 'p1' : 'p2'])) t = 'Step 4 · Tap pump ' + (o('v84') ? '40/15' : '5/17') + ' to start it — the water starts flowing.';
+  else if (!pipes.some(p => p.flow && /^(ma|mb|ep|es|b3|v17|bf|v56)/.test(p.to)) && (next = shut(['ma1', 'ma2']))) t = 'Pump running · Open the branch valves (M/R, E/R, III, F/E) to send cooling water to them.';
   else { t = '✓ Water is flowing — dark blue shows where it travels; coolers turn green.'; ok = true; }
   if (guideEl.textContent !== t) guideEl.textContent = t;
   guideEl.classList.toggle('ok', ok);
+  for (const p of parts.values()) p.button.classList.toggle('next', next.includes(p.id));
 }
+const NUM = id => /^v\d+$/.test(id) ? id.slice(1) : { p1: '40/15', p2: '5/17' }[id] || '';
+const numEls = [...parts.values()].filter(p => NUM(p.id)).map(p => { const e = document.createElement('div'); e.className = 'vnum' + (p.type === 'pump' ? ' pump' : ''); e.textContent = NUM(p.id); labelsRoot.append(e); return { p, e }; });
+const runEls = ['p1', 'p2'].map(id => { const e = document.createElement('div'); e.className = 'vrun'; labelsRoot.append(e); return { p: parts.get(id), e }; });
+{ const st = document.createElement('style'); st.textContent = `.vnum{position:absolute;transform:translate(-50%,-50%);font:800 var(--num,13px)/1 Arial,sans-serif;color:#10242a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff;pointer-events:none;white-space:nowrap}
+.vnum.pump{font-size:calc(var(--num,13px)*1.15)}
+.vrun{position:absolute;transform:translate(-50%,-50%);padding:.25em .7em;border-radius:999px;font:800 calc(var(--num,13px)*.85)/1.2 Arial,sans-serif;pointer-events:none;white-space:nowrap;background:#5d6b72;color:#fff}
+.vrun.on{background:#1f9e5a;box-shadow:0 0 0 3px #1f9e5a55}
+#labels .part-button.next::after{content:'';position:absolute;inset:-10px;border-radius:50%;border:4px solid #f5a623;animation:nextPulse 1.1s ease-in-out infinite;pointer-events:none}
+@keyframes nextPulse{0%,100%{transform:scale(.85);opacity:.95}50%{transform:scale(1.15);opacity:.35}}`; document.head.append(st); }
 const warnEl = document.createElement('div'); warnEl.id = 'vent-warning'; warnEl.setAttribute('role', 'alert'); circuit.append(warnEl);
 let warnTimer = 0;
 function notify(msg, info = false) { warnEl.textContent = msg; warnEl.className = info ? 'info' : ''; warnEl.style.opacity = '1'; clearTimeout(warnTimer); warnTimer = setTimeout(() => { warnEl.style.opacity = '0'; }, info ? 2200 : 4000); }
@@ -735,6 +749,9 @@ function layout() {
     const [sx, sy] = screenPoint(p.x, p.y), s = Math.max(44, p.size * pxPerUnit);
     Object.assign(p.button.style, { left: sx + 'px', top: sy + 'px', width: s + 'px', height: s + 'px', minWidth: '44px', minHeight: '44px' });
   }
+  labelsRoot.style.setProperty('--num', Math.min(30, Math.max(10, 17 * pxPerUnit)).toFixed(1) + 'px');
+  for (const { p, e } of numEls) { const pump = p.type === 'pump', [sx, sy] = screenPoint(p.x + (pump ? 0 : 24), p.y + (pump ? -56 : -26), 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const { p, e } of runEls) { const [sx, sy] = screenPoint(p.x, p.y + 52, 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const s of SPOTS) { const [sx, sy] = screenPoint(s.x, s.y, 80); Object.assign(s.button.style, { left: sx + 'px', top: sy + 'px' }); }
 }
 new ResizeObserver(layout).observe(host);
@@ -752,8 +769,10 @@ function frame(now) {
     const target = S.on[p.key] ? S.set[p.key] : 0, tau = target > p.speed ? PUMP_SPIN_UP_S : PUMP_COAST_S;
     p.speed += (target - p.speed) * (1 - Math.exp(-dt / tau)); if (!target && p.speed < .002) p.speed = 0;
     p.angle += p.speed * PUMP_REV_PER_S * Math.PI * 2 * dt; if (p.rotor) p.rotor.rotation.x = p.angle;
+    if (p.base) { const j = p.speed * .35; p.group.position.set(p.base.x + Math.sin(now * .09) * j, p.base.y, p.base.z + Math.cos(now * .113) * j); p.runGlow.material.opacity = .55 * p.speed; }
   }
   solve(); guide();
+  for (const { p, e } of runEls) { const on = S.on[p.id], t = !S.running ? '' : on ? (p.speed > .95 ? 'RUNNING · 1450 rpm' : 'STARTING…') : p.speed > .02 ? 'STOPPING…' : 'STOPPED'; if (e.textContent !== t) e.textContent = t; e.classList.toggle('on', on); e.style.display = t ? '' : 'none'; }
   const px = pxPerUnit * renderer.getPixelRatio();
   for (const p of pipes) pipeUpdate(p, dt, p.flow ? 500 * Math.max(.3, Math.max(parts.get('p1').speed, parts.get('p2').speed)) : 0, AIR[p.air], px, now);
   for (const p of parts.values()) {

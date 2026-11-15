@@ -295,21 +295,36 @@ function valve(id, x, y, vertical, title, side = 'top') {
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: lamp(g, 32, -10), wheel, wheelTarget: closed, closedAngle: closed, openAngle: closed + Math.sign(Math.sin(open - closed) || 1) * Math.PI / 2 });
 }
 // Exhaust Klinket 58 as a gate valve: two cones meeting point to point on the pipe, a stem and a round handwheel.
-// The cones carry the state colour (grey before Start, red closed, teal-green open); the handwheel spins when operated.
-const GATE_ON = new T.Color('#1f9e7a');
+// Drawing symbols: flat black line-work lying on top of the pipes, exactly as on the supplied drawing.
+const INK = new T.MeshBasicMaterial({ color: '#111518' }), SYM_Y = PIPE_Y + 18;
+function symLine(g, x0, y0, x1, y1, w = 4) {          // a straight stroke in plan units, relative to the group
+  const L = Math.hypot(x1 - x0, y1 - y0), m = new T.Mesh(new T.PlaneGeometry(L + w, w), INK);
+  m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(y1 - y0, x1 - x0); m.position.set((x0 + x1) / 2, 0, (y0 + y1) / 2); m.renderOrder = 12; g.add(m); return m;
+}
+function symFill(g, pts, matl) {                      // filled polygon (plan points, relative)
+  const sh = new T.Shape(pts.map(([x, y]) => new T.Vector2(x, -y))), m = new T.Mesh(new T.ShapeGeometry(sh), matl);
+  m.rotation.x = -Math.PI / 2; m.position.y = -.5; m.renderOrder = 11; g.add(m); return m;
+}
+function symText(text, x, y, size = 15) {
+  const c = document.createElement('canvas'), k = 8; c.width = text.length * size * k * .7 + 20; c.height = size * k * 1.3;
+  const g = c.getContext('2d'); g.font = 'bold ' + size * k + 'px "Times New Roman", serif'; g.fillStyle = '#111518'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, c.height / 2);
+  const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 8;
+  const m = new T.Mesh(new T.PlaneGeometry(c.width / k, c.height / k), new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.copy(P(x, y, SYM_Y)); m.renderOrder = 12; scene.add(m);
+}
+// Exhaust Klinket 58, as drawn: a gate valve (two triangles point to point, ▶◀) on the line, a stem rising from the
+// centre and turning right into the handle bar. The triangles are black like the drawing before Start, then carry the
+// state colour (red shut, green open) with a black outline.
+const GATE_ON = new T.Color('#1f9e7a'), INK_COL = new T.Color('#111518');
 function gateValve(id, x, y, title) {
-  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
-  const body = new T.MeshPhysicalMaterial({ color: LAMP_IDLE.clone(), roughness: .3, metalness: .1, transparent: true, opacity: .88, clearcoat: .6 });
-  for (const sgn of [-1, 1]) {                                        // cone bases outward, tips at the centre
-    const c = new T.Mesh(new T.ConeGeometry(22, 26, 32, 1, true), body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13; g.add(c);
-    const rim = new T.Mesh(new T.TorusGeometry(22, 1.6, 8, 32), new T.MeshStandardMaterial({ color: '#0f5f4a', roughness: .4 })); rim.rotation.y = Math.PI / 2; rim.position.x = sgn * 26; g.add(rim);
-  }
-  const arm = new T.Group(); arm.rotation.x = -Math.PI / 2 + .55; g.add(arm);   // stem leans toward the viewer so the wheel reads as a disc
-  const stem = new T.Mesh(new T.CylinderGeometry(2.6, 2.6, 34, 10), new T.MeshStandardMaterial({ color: '#5d6b72', metalness: .6, roughness: .4 })); stem.position.y = 17; arm.add(stem);
-  const wheel = new T.Group(); wheel.position.y = 36; arm.add(wheel);
-  wheel.add(new T.Mesh(new T.CylinderGeometry(19, 19, 4, 40), new T.MeshPhysicalMaterial({ color: '#1f8a6c', roughness: .35, clearcoat: .5 })));
-  const spoke = new T.Mesh(new T.BoxGeometry(34, 4.6, 3), new T.MeshStandardMaterial({ color: '#0f5f4a' })); spoke.position.y = 1; wheel.add(spoke);
-  return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON }, wheel, wheelTarget: 0, closedAngle: 0, openAngle: -4 * Math.PI });
+  const g = new T.Group(); g.position.copy(P(x, y, SYM_Y)); scene.add(g);
+  const fillMat = new T.MeshBasicMaterial({ color: INK_COL.clone() }), state = { color: LAMP_IDLE.clone() };
+  const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
+  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => fillMat.color.copy(S.running ? state.color : INK_COL); }
+  for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 3.5);
+  symLine(g, 0, 0, 0, -38, 4); symLine(g, 0, -38, 44, -38, 4);               // stem up, handle bar to the right
+  symText('EXHAUST', x + 10, y - 92, 15); symText('KLINKET', x + 10, y - 70, 15);
+  return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }
 function flap(id, key, x, y, title) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
@@ -524,16 +539,12 @@ blower('bg', 650, 880, 122, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => 
 });
 const filterBox = diamond(385, 760, 'filter'); diamond(910, 512, 'cool');
 const FILTER_IDLE = new T.Color('#8e9ca3'), filterCol = FILTER_IDLE.clone();
-{ // 101 · H₂ sensor, as drawn ( –⊏‖–| ): a stub off the pipe, a flange pair, the sensor cup opening outward, a short tail
-  const dark = new T.MeshStandardMaterial({ color: '#2f383d', metalness: .5, roughness: .45 }), y = 890, h = PIPE_Y;
-  const bar = (x0, x1, r, m) => { const c = new T.Mesh(new T.CylinderGeometry(r, r, Math.abs(x1 - x0), 12), m); c.rotation.z = Math.PI / 2; c.position.copy(P((x0 + x1) / 2, y, h)); scene.add(c); };
-  bar(373, 357, 3.5, steel);                                                         // stub from the pipe wall
-  for (const x of [356, 351]) { const d = new T.Mesh(new T.CylinderGeometry(10, 10, 2.6, 24), steel); d.rotation.z = Math.PI / 2; d.position.copy(P(x, y, h)); scene.add(d); }   // ‖ flange pair
-  bar(350, 345, 3.5, steel);
-  const cup = new T.Group(); cup.position.copy(P(337, y, h)); scene.add(cup);          // ⊏ sensor cup, open to the left
-  for (const [w, d, ox, oz] of [[3, 24, 7, 0], [15, 3, 0, -10.5], [15, 3, 0, 10.5]]) { const b = new T.Mesh(new T.BoxGeometry(w, 16, d), dark); b.position.set(ox, 0, oz); cup.add(b); }
-  const core = new T.Mesh(new T.BoxGeometry(10, 12, 16), new T.MeshStandardMaterial({ color: '#7d8a91', metalness: .4, roughness: .5 })); core.position.x = 1; cup.add(core);
-  bar(330, 318, 2.4, dark);                                                          // – tail
+{ // 101 · H₂ sensor, as drawn ( -ᑕ‖—| ): short tail, a cup open to the right, a double bar, then the line into the pipe
+  const g = new T.Group(); g.position.copy(P(0, 890, SYM_Y)); scene.add(g);
+  symLine(g, 318, 0, 328, 0, 3.5);                                   // tail
+  symLine(g, 330, -11, 330, 11, 3.5); symLine(g, 330, -11, 342, -11, 3.5); symLine(g, 330, 11, 342, 11, 3.5);   // ᑕ
+  symLine(g, 347, -13, 347, 13, 3.5); symLine(g, 352, -13, 352, 13, 3.5);                                      // ‖
+  symLine(g, 352, 0, 372, 0, 3.5);                                   // into the pipe
 }
 const thermo = [dial(632, 690), dial(694, 690)];                                 // thermometers across burner 2 (in / out)
 wire([[580, 585], [580, 690], [612, 690]]); wire([[652, 690], [674, 690]]); wire([[714, 690], [745, 690], [745, 585]]);
@@ -707,6 +718,12 @@ showRunState();
 .modes .msg{margin-top:.55em;padding:.5em .7em;border-radius:.55em;font-weight:700;font-size:.92em;display:none}
 .modes .msg.ok{display:block;background:#e3f6ea;color:#126b3c}.modes .msg.bad{display:block;background:#fdecea;color:#a8322a}
 .modes .hint{font-size:.8em;color:#5a7586;margin:.1em 0 .5em}
+.modes .cur{font-size:1em;color:#0f4566;line-height:1.35}.modes .cur b{color:#1f7fbf;margin-right:.3em}
+.modes .dots{display:flex;gap:.35em;margin-top:.5em}.modes .dots i{width:.75em;height:.75em;border-radius:50%;background:#d5e2ea}.modes .dots i.d{background:#22a35a}.modes .dots i.n{background:#1f7fbf;box-shadow:0 0 0 .2em #1f7fbf44}
+.tap-tip{position:absolute;transform:translate(-50%,-100%);pointer-events:none;z-index:6;font:700 clamp(10px,calc(var(--k,1)*15px),28px)/1.25 Arial,sans-serif;background:#1f7fbf;color:#fff;padding:.45em .75em;border-radius:.7em;box-shadow:0 .4em 1.2em #0b2a3d55;max-width:16em;text-align:center;animation:tipBob 1.2s ease-in-out infinite}
+.tap-tip b{display:block;letter-spacing:.06em}.tap-tip span{display:block;font-weight:400;font-size:.82em;opacity:.95}
+.tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
+@keyframes tipBob{50%{translate:0 -.35em}}
 .mode-bar{position:absolute;left:14px;top:50%;transform:translate(-10px,-50%);display:flex;flex-direction:column;gap:10px;z-index:15;opacity:0;pointer-events:none;transition:opacity .35s,transform .35s;font-family:Arial,sans-serif}
 .mode-bar.show{opacity:1;transform:translate(0,-50%);pointer-events:auto}
 .mode-bar button{width:clamp(96px,8.6vw,200px);min-height:clamp(52px,4.6vw,96px);text-align:left;padding:6px 14px;border-radius:12px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
@@ -730,9 +747,9 @@ const anchored = [];                                    // HTML pinned to plan p
 function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored.push(a); return a; }
 
 // ---- every valve port number on the drawing
-const PORTS = [['v58', '58', 140, 318], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
+const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
   ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 300, 890]];
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936]];
 for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
@@ -845,6 +862,7 @@ function chooseMode(m) {
 }
 const modesEl = document.createElement('div'); modesEl.className = 'vcard modes'; modesEl.setAttribute('role', 'region'); modesEl.setAttribute('aria-label', 'Ventilation modes');
 pin(modesEl, 1180, 905);
+const tapTips = [];
 function drawModes() {
   const { st, i } = progress(), m = MODES[mode];
   const tab = (k, name, dis) => '<button type="button" data-m="' + k + '"' + (mode == k ? ' class="on"' : '') + (dis ? ' disabled title="Comes with the engine-room section"' : '') + '>Mode ' + k + '<small>' + name + '</small></button>';
@@ -852,7 +870,7 @@ function drawModes() {
   if (!S.running) html += '<div class="hint">Press ▶ Start, then choose a mode (1–5) at the top of the screen.</div>';
   else if (!m) html += '<div class="hint">Choose a mode at the top of the screen: Mode 1, 2, 3, 4 or 5.</div>';
   else {
-    html += '<div class="hint">' + m.title + '</div><ol>' + st.map(([t], k) => '<li class="' + (k < i ? 'done' : k === i ? 'now' : '') + '"><b>' + (k < i ? '✓' : k + 1) + '</b><span>' + t + '</span></li>').join('') + '</ol>';
+    html += '<div class="hint">' + m.title + '</div><div class="cur">' + (i < st.length ? '<b>Step ' + (i + 1) + ' / ' + st.length + '</b> ' + st[i][0] : '') + '</div><div class="dots">' + st.map((_, k) => '<i class="' + (k < i ? 'd' : k === i ? 'n' : '') + '"></i>').join('') + '</div>';
     const bad = wrongProcess();
     html += bad ? '<div class="msg bad">⚠ ' + bad + '</div>' : i >= st.length ? '<div class="msg ok">✓ ' + m.title.split(' · ')[1] + ' — complete</div>' : '';
   }
@@ -860,6 +878,11 @@ function drawModes() {
   // pulse the part(s) to touch next
   const nextIds = m && i < st.length ? (typeof st[i][2] === 'function' ? st[i][2]() : st[i][2]) : [];
   for (const p of parts.values()) p.button.classList.toggle('next', nextIds.includes(p.id));
+  const text = m && i < st.length ? st[i][0].replace(/ \(done.*\)/, '') : '';
+  nextIds.forEach((id, k) => { let c = tapTips[k]; if (!c) { c = tapTips[k] = document.createElement('div'); c.className = 'tap-tip'; labelsRoot.append(c); c._a = pin(c, 0, 0); }
+    const part = parts.get(id); c._a.x = part.x; c._a.y = part.y - part.size * .55 - 30; const h = '<b>👆 TAP HERE</b><span>' + text + '</span>'; if (c.innerHTML !== h) c.innerHTML = h; c.style.display = ''; });
+  for (let k = nextIds.length; k < tapTips.length; k++) tapTips[k].style.display = 'none';
+  for (const c of tapTips) if (c.style.display !== 'none') { const [sx, sy] = screenPoint(c._a.x, c._a.y, 80); c.style.left = sx + 'px'; c.style.top = sy + 'px'; }
 }
 function wrongProcess() {
   if (!mode) return '';

@@ -372,8 +372,12 @@ function burner(id, key, x, y, title) {
   const lid = new T.Mesh(new T.BoxGeometry(W - 6, 2, D - 6), new T.MeshPhysicalMaterial({ color: '#3a2a22', roughness: .05, transparent: true, opacity: .32, clearcoat: 1, depthWrite: false }));
   lid.position.y = H / 2 - 1; lid.renderOrder = 9; g.add(lid);                                                                   // smoked-glass top
   const glow = sprite(glowTex, '#ff8a2a', 230, 0); glow.position.y = 10; glow.renderOrder = 9; g.add(glow);
+  // top face: the band colour fills the whole burner, with its name, the temperature and COOL / WARM / HOT
+  const fc = document.createElement('canvas'); fc.width = 560; fc.height = 400; const ftex = new T.CanvasTexture(fc); ftex.colorSpace = T.SRGBColorSpace; ftex.anisotropy = 8;
+  const face = new T.Mesh(new T.PlaneGeometry(W - 4, D - 4), new T.MeshBasicMaterial({ map: ftex, transparent: true, toneMapped: false }));
+  face.rotation.x = -Math.PI / 2; face.position.y = H / 2 + 1.5; face.renderOrder = 10; g.add(face);
   const lg = new T.Group(); lg.position.set(66, 0, -46); g.add(lg);
-  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, nozzles, ember });
+  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, nozzles, ember, face: { c: fc, tex: ftex, shown: '' }, label: title.replace('H₂ burner', 'H₂ BURNER') });
 }
 function diamond(x, y, kind) {
   const top = canvasTexture(128, (c, s) => {
@@ -739,9 +743,22 @@ const BURN_CSS = t => t < 40 ? '#2f7fd0' : t <= 70 ? '#e07b14' : '#d8322b';
   slider.addEventListener('input', () => set(+slider.value)); minus.onclick = () => set(burnerT - 5); plus.onclick = () => set(burnerT + 5);
   pin(el, 905, 700); set(30);
 }
-function burnerLook(p, dt) {                            // body tint follows the set temperature band
+function burnerLook(p, dt) {                            // body and top face follow the set temperature band
   const c = BURN_COL(burnerT); p.mat.color.lerp(c.clone().multiplyScalar(.85), Math.min(1, dt * 5));
   p.mat.emissive.copy(c); p.mat.emissiveIntensity = .35;
+  const key = burnerT + '', f = p.face; if (!f || f.shown === key) return; f.shown = key;
+  const g = f.c.getContext('2d'), W = f.c.width, H = f.c.height, band = burnerT < 40 ? 0 : burnerT <= 70 ? 1 : 2;
+  const col = [['#5aa9f0', '#1f63b0', '#0f3f78'], ['#ffb04a', '#e0700f', '#9a4300'], ['#ff6a5a', '#c8261c', '#7d130c']][band];
+  g.clearRect(0, 0, W, H);
+  const r = 46, rr = (x, y, w, h) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]);
+  rr(8, 8, W - 16, H - 16); g.fillStyle = gr; g.fill(); g.lineWidth = 14; g.strokeStyle = col[2]; g.stroke();
+  g.fillStyle = 'rgba(255,255,255,.18)'; for (let row = 0; row < 2; row++) for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(70 + i * 84, row ? 318 : 82, 9, 0, 7); g.fill(); }   // burner nozzles, faint
+  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 8;
+  g.font = 'bold 44px Arial'; g.fillText(p.label, W / 2, 84);
+  g.font = 'bold 132px Arial'; g.fillText(burnerT + '°C', W / 2, 205);
+  g.font = 'bold 46px Arial'; g.fillText(['COOL', 'WARM', 'HOT'][band], W / 2, 318);
+  f.tex.needsUpdate = true;
 }
 
 // ---- i on the burners, cooler and filter (blowers and batteries already have theirs)
@@ -753,8 +770,8 @@ function infoCard(title, text, rows) {
 }
 const tempWord = t => t < 40 ? 'Blue · below 40 °C' : t <= 70 ? 'Orange · 40–70 °C' : 'Red · above 70 °C';
 const MORE_INFO = [
-  ['h1', 640, 395, () => infoCard('H₂ burner 1', 'Catalytic hydrogen burner. Pit air passes through it after FLAP 103 and the hydrogen given off by the batteries is recombined with oxygen, which heats the air.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qa) + ' m³/h'], ['Flap 103', S.flap.a ? 'OPEN' : 'CLOSED']])],
-  ['h2', 650, 540, () => infoCard('H₂ burner 2', 'Second catalytic hydrogen burner, in parallel with burner 1 behind its own FLAP 103.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qb) + ' m³/h'], ['Flap 103', S.flap.b ? 'OPEN' : 'CLOSED']])],
+  ['h1', 572, 400, () => infoCard('H₂ burner 1', 'Catalytic hydrogen burner. Pit air passes through it after FLAP 103 and the hydrogen given off by the batteries is recombined with oxygen, which heats the air.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qa) + ' m³/h'], ['Flap 103', S.flap.a ? 'OPEN' : 'CLOSED']])],
+  ['h2', 582, 545, () => infoCard('H₂ burner 2', 'Second catalytic hydrogen burner, in parallel with burner 1 behind its own FLAP 103.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qb) + ' m³/h'], ['Flap 103', S.flap.b ? 'OPEN' : 'CLOSED']])],
   ['clr', 960, 470, () => infoCard('Cooler', 'Air cooler after the burners. It takes the heat added by the burners back out before the air reaches blowers 1 and 2 (valves 109 / 110).', () => [['Air through it', Math.round(flows.qm) + ' m³/h'], ['Outlet temperature', Math.round(S.pit.Tcool) + ' °C'], ['Air velocity (V)', flows.velocity.toFixed(1) + ' m/s']])],
   ['flt', 440, 720, () => infoCard('Filter', 'Filter on the suction line after valve 122. It cleans the pit air before the H₂ burners.', () => [['Valve 122', S.open.v122 ? 'OPEN' : 'CLOSED'], ['Air through it', Math.round(flows.qm) + ' m³/h']])]
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });

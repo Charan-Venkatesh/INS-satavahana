@@ -26,6 +26,7 @@ const css = `
 #blower-detail .bl-check{display:flex;gap:6px;align-items:center;margin-top:10px;color:#6b7a80;cursor:pointer}
 #blower-detail .bl-warn{margin-top:8px;color:#c0392b;font-size:13px;min-height:1em}
 #blower-detail .bl-hint{position:absolute;right:12px;bottom:12px;color:#6b7a80;font-size:12px}
+#blower-detail .bl-views{display:flex;gap:6px;align-items:center}#blower-detail .bl-views button[aria-pressed="true"]{background:#1d4f6e;border-color:#1d4f6e;color:#fff}
 @media(max-width:560px){#blower-detail .bl-hint{display:none}}`;
 { const style = document.createElement('style'); style.textContent = css; document.head.append(style); }
 
@@ -42,7 +43,7 @@ export function openBlowerDetail(opts) {
 
 function build() {
   dlg = document.createElement('dialog'); dlg.id = 'blower-detail';
-  dlg.innerHTML = `<div class="bl-head"><h2></h2><button id="bl-close">Close ×</button></div>
+  dlg.innerHTML = `<div class="bl-head"><h2></h2><div class="bl-views" role="group" aria-label="View"><button type="button" data-v="top" aria-pressed="true">Top</button><button type="button" data-v="iso" aria-pressed="false">3D</button><button type="button" data-v="side" aria-pressed="false">Side</button><button id="bl-close">Close ×</button></div></div>
 <div class="bl-stage"><div class="bl-panel"><h3></h3><div class="bl-sub"></div>
 <button id="bl-power" type="button" aria-pressed="false"><span class="bl-led"></span><span id="bl-power-label">Power OFF</span></button>
 <div class="bl-row"><label for="bl-speed">Speed</label><input id="bl-speed" type="range" min="20" max="100" value="100"><span id="bl-speed-val">100%</span></div>
@@ -69,6 +70,14 @@ function build() {
   const orbit = { r: 2.2, th: 0.6, ph: 1.05 };     // distance, azimuth, polar — starts at the supplied viewer's camera
   const place = () => { camera.position.set(target.x + orbit.r * Math.sin(orbit.ph) * Math.cos(orbit.th), target.y + orbit.r * Math.cos(orbit.ph), target.z + orbit.r * Math.sin(orbit.ph) * Math.sin(orbit.th)); camera.lookAt(target); };
   place();
+  // view buttons: Top (straight down), 3D (the supplied viewer's angle), Side; the camera glides to the chosen view
+  const VIEWS = { top: { th: Math.PI / 2, ph: 0.02 }, iso: { th: 0.6, ph: 1.05 }, side: { th: Math.PI / 2, ph: Math.PI * 0.49 } };
+  let viewTo = null;
+  const markView = v => dlg.querySelectorAll('.bl-views [data-v]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  const setView = (v, instant) => { viewTo = VIEWS[v]; markView(v); if (instant) { orbit.th = viewTo.th; orbit.ph = viewTo.ph; viewTo = null; place(); } else glide(); };
+  const glide = () => { if (!viewTo) return; const k = 0.16; orbit.th += (viewTo.th - orbit.th) * k; orbit.ph += (viewTo.ph - orbit.ph) * k; place();
+    if (Math.abs(viewTo.th - orbit.th) + Math.abs(viewTo.ph - orbit.ph) < 0.002) { orbit.th = viewTo.th; orbit.ph = viewTo.ph; place(); viewTo = null; } else requestAnimationFrame(glide); };
+  dlg.querySelectorAll('.bl-views [data-v]').forEach(b => b.onclick = () => setView(b.dataset.v));
   scene.add(new THREE.HemisphereLight(0xffffff, 0xb8c2c8, 0.6));
   const sun = new THREE.DirectionalLight(0xffffff, 1.6); sun.position.set(1.5, 3, 2); sun.castShadow = true; sun.shadow.mapSize.set(2048, 2048);
   Object.assign(sun.shadow.camera, { left: -1.2, right: 1.2, top: 1.2, bottom: -1.2, near: 0.5, far: 8 }); sun.shadow.bias = -0.0004; scene.add(sun);
@@ -81,7 +90,7 @@ function build() {
   canvas.addEventListener('pointerdown', e => { canvas.setPointerCapture(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]); });
   canvas.addEventListener('pointermove', e => {
     if (!pts.has(e.pointerId)) return; const [x0, y0] = pts.get(e.pointerId); pts.set(e.pointerId, [e.clientX, e.clientY]);
-    if (pts.size === 1) { orbit.th += (e.clientX - x0) * 0.008; orbit.ph = Math.min(Math.PI * 0.495, Math.max(0.15, orbit.ph - (e.clientY - y0) * 0.006)); }
+    if (pts.size === 1) { orbit.th += (e.clientX - x0) * 0.008; orbit.ph = Math.min(Math.PI * 0.495, Math.max(0.02, orbit.ph - (e.clientY - y0) * 0.006)); viewTo = null; markView(''); }
     else { const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]); if (pinch) orbit.r = Math.min(6, Math.max(0.6, orbit.r * pinch / d)); pinch = d; }
     place();
   });
@@ -103,7 +112,7 @@ function build() {
     dlg.querySelector('.bl-sub').textContent = K.sub; dlg.querySelector('#bl-what').textContent = K.what; dlg.querySelector('#bl-qname').textContent = K.q; dlg.querySelector('.bl-hint').textContent = K.hint;
     dlg.querySelector('.bl-check').style.display = k === 'blower' ? '' : 'none';
     outPool.points.visible = inPool.points.visible = k === 'blower' && dlg.querySelector('#bl-air').checked;
-    target.set(...K.target); orbit.r = K.r; place();
+    target.set(...K.target); orbit.r = K.r; setView('top', true);
     for (const m of Object.values(models)) m.visible = false;
     rotor = null;
     const use = m => { m.visible = true; rotor = m.getObjectByName(K.rotor); };

@@ -547,7 +547,33 @@ const FILTER_IDLE = new T.Color('#8e9ca3'), filterCol = FILTER_IDLE.clone();
   symLine(g, 347, -13, 347, 13, 3.5); symLine(g, 352, -13, 352, 13, 3.5);                                      // ‖
   symLine(g, 352, 0, 372, 0, 3.5);                                   // into the pipe
 }
-const thermo = [dial(632, 690), dial(694, 690)];                                 // thermometers across burner 2 (in / out)
+// Burner temperature gauges (client): a 0–150 °C dial with the blue / orange / red bands, a needle that sweeps to the
+// burner temperature and a live °C readout. Left = burner 1, right = burner 2. Drawn on a flat face so it reads upright.
+function tempGauge(x, y, tag) {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 8;
+  const R = 29, rim = new T.Mesh(new T.CylinderGeometry(R + 3, R + 3, 8, 40), new T.MeshStandardMaterial({ color: '#c9d2d7', metalness: .75, roughness: .3 }));
+  rim.position.copy(P(x, y, PIPE_Y)); scene.add(rim);
+  const face = new T.Mesh(new T.CircleGeometry(R, 48), new T.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  face.rotation.x = -Math.PI / 2; face.position.copy(P(x, y, PIPE_Y + 4.2)); face.renderOrder = 3; scene.add(face);
+  let shown = -1, cur = EST.ambient;
+  const A = v => (-225 + Math.min(150, Math.max(0, v)) / 150 * 270) * Math.PI / 180;   // 0 °C bottom-left → 150 °C bottom-right
+  return (target, dt) => {
+    cur += (target - cur) * Math.min(1, dt * 3);                                   // needle eases so the change is visible
+    const key = Math.round(cur * 2) / 2; if (key === shown) return; shown = key;
+    const g = c.getContext('2d'), m = 256; g.clearRect(0, 0, 512, 512);
+    g.fillStyle = '#fbfcfd'; g.beginPath(); g.arc(m, m, 250, 0, 7); g.fill(); g.lineWidth = 12; g.strokeStyle = '#26323a'; g.stroke();
+    for (const [a, b, col] of [[0, 40, '#2f7fd0'], [40, 70, '#f08a24'], [70, 150, '#d8322b']]) { g.beginPath(); g.arc(m, m, 205, A(a), A(b)); g.lineWidth = 26; g.strokeStyle = col; g.stroke(); }
+    g.strokeStyle = '#26323a'; g.fillStyle = '#26323a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let v = 0; v <= 150; v += 10) { const a = A(v), big = v % 50 === 0, r1 = big ? 165 : 180; g.lineWidth = big ? 7 : 4; g.beginPath(); g.moveTo(m + 218 * Math.cos(a), m + 218 * Math.sin(a)); g.lineTo(m + r1 * Math.cos(a), m + r1 * Math.sin(a)); g.stroke(); if (big) { g.font = 'bold 38px Arial'; g.fillText(v, m + 132 * Math.cos(a), m + 132 * Math.sin(a)); } }
+    const col = cur < 40 ? '#2f7fd0' : cur <= 70 ? '#e07b14' : '#d8322b';
+    g.font = 'bold 40px Arial'; g.fillStyle = '#4a5a64'; g.fillText(tag, m, m - 70);
+    g.font = 'bold 66px Arial'; g.fillStyle = col; g.fillText(Math.round(cur) + '°C', m, m + 118);
+    const a = A(cur); g.strokeStyle = '#c8261c'; g.lineWidth = 12; g.lineCap = 'round'; g.beginPath(); g.moveTo(m - 40 * Math.cos(a), m - 40 * Math.sin(a)); g.lineTo(m + 190 * Math.cos(a), m + 190 * Math.sin(a)); g.stroke();
+    g.fillStyle = '#26323a'; g.beginPath(); g.arc(m, m, 22, 0, 7); g.fill();
+    tex.needsUpdate = true;
+  };
+}
+const thermo = [tempGauge(632, 690, 'B1'), tempGauge(694, 690, 'B2')];                // burner 1 / burner 2 temperature
 wire([[580, 585], [580, 690], [612, 690]]); wire([[652, 690], [674, 690]]); wire([[714, 690], [745, 690], [745, 585]]);
 wire([[845, 512], [845, 345], [877, 345]]); wire([[917, 345], [950, 345], [950, 512]]);   // V meter across the cooler
 const vDial = dial(897, 345, 'V');
@@ -987,7 +1013,7 @@ function frame(now) {
     const target = !S.running ? LAMP_IDLE : isOn(p) ? (p.lamp.on || LAMP_ON) : LAMP_OFF;
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
-  thermo[0](EST.ambient); thermo[1](S.pit.Tb); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler
+  thermo[0](burnerT, dt); thermo[1](burnerT, dt); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler
   filterCol.lerp(!S.running ? FILTER_IDLE : S.open.v122 ? LAMP_ON : LAMP_OFF, Math.min(1, dt * 6));
   filterBox.face.color.copy(filterCol); filterBox.side.color.copy(filterCol).multiplyScalar(.7);
   for (const pl of plumes) plumeUpdate(pl, dt, flowOf(pl.key));

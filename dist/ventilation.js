@@ -702,6 +702,13 @@ showRunState();
 .modes .msg{margin-top:.55em;padding:.5em .7em;border-radius:.55em;font-weight:700;font-size:.92em;display:none}
 .modes .msg.ok{display:block;background:#e3f6ea;color:#126b3c}.modes .msg.bad{display:block;background:#fdecea;color:#a8322a}
 .modes .hint{font-size:.8em;color:#5a7586;margin:.1em 0 .5em}
+.mode-bar{position:absolute;left:14px;top:50%;transform:translate(-10px,-50%);display:flex;flex-direction:column;gap:10px;z-index:15;opacity:0;pointer-events:none;transition:opacity .35s,transform .35s;font-family:Arial,sans-serif}
+.mode-bar.show{opacity:1;transform:translate(0,-50%);pointer-events:auto}
+.mode-bar button{width:clamp(96px,8.6vw,200px);min-height:clamp(52px,4.6vw,96px);text-align:left;padding:6px 14px;border-radius:12px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
+.mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}
+.mode-bar button:active{transform:scale(.96)}.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 0 0 4px #1d4f6e33,0 4px 14px #12405e33}
+.mode-bar button.soon{border-style:dashed;opacity:.55}
+.port-no{transition:background .3s,opacity .3s,transform .3s}.port-no.use{background:#1f7fbf;transform:translate(-50%,-50%) scale(1.12)}.port-no.dim{opacity:.35}
 .part-button.next{animation:nextRing 1.1s ease-in-out infinite;border-radius:50%}
 @keyframes nextRing{0%,100%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 0 #1f7fbf66}50%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 14px #1f7fbf00}}
 .vinfo-card{position:fixed;inset:0;background:#0b2a3d55;display:grid;place-items:center;z-index:50}
@@ -783,8 +790,9 @@ pin(modesEl, 1180, 905);
 function drawModes() {
   const { st, i } = progress(), m = MODES[mode];
   const tab = (k, name, dis) => '<button type="button" data-m="' + k + '"' + (mode == k ? ' class="on"' : '') + (dis ? ' disabled title="Comes with the engine-room section"' : '') + '>Mode ' + k + '<small>' + name + '</small></button>';
-  let html = '<h3>BATTERY PIT VENTILATION · MODE</h3><div class="tabs">' + tab(1, 'Closed') + tab(2, 'Into compt') + tab(3, 'Supply+exh.', 1) + tab(4, 'Standard', 1) + tab(5, 'Urgent dive') + '</div>';
-  if (!m) html += '<div class="hint">Choose a mode. The circuit starts with 103 open and every other port closed; follow the steps.</div>';
+  let html = '<h3>BATTERY PIT VENTILATION' + (m ? ' · MODE ' + mode : '') + '</h3>';
+  if (!S.running) html += '<div class="hint">Press ▶ Start, then choose a mode (1–5) at the top of the screen.</div>';
+  else if (!m) html += '<div class="hint">Choose a mode at the top of the screen: Mode 1, 2, 3, 4 or 5.</div>';
   else {
     html += '<div class="hint">' + m.title + '</div><ol>' + st.map(([t], k) => '<li class="' + (k < i ? 'done' : k === i ? 'now' : '') + '"><b>' + (k < i ? '✓' : k + 1) + '</b><span>' + t + '</span></li>').join('') + '</ol>';
     const bad = wrongProcess();
@@ -812,7 +820,18 @@ function checkStep(id, wasOn) {
   if (bad) warn('⚠ ' + bad);
   else if (!wasOn && !want.includes(id) && !st.slice(0, i).some(s => (typeof s[2] === 'function' ? s[2]() : s[2]).includes(id))) warn('⚠ Wrong step — next: ' + st[i][0]);
 }
-setInterval(drawModes, 250); drawModes();
+const USES = { 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
+const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
+modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
+circuit.append(modeBar);
+modeBar.querySelectorAll('button').forEach(b => b.onclick = () => { const k = +b.dataset.m; if (!MODES[k]) { notify('Mode ' + k + ' will be added with the engine-room section.', true); return; } chooseMode(k); });
+function drawModeBar() {
+  modeBar.classList.toggle('show', S.running);
+  modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
+  const use = USES[mode] || null;
+  document.querySelectorAll('.port-no').forEach((el, i) => { const id = PORTS[i][0]; el.classList.toggle('use', !!use && use.includes(id)); el.classList.toggle('dim', !!use && !use.includes(id)); });
+}
+setInterval(() => { drawModes(); drawModeBar(); }, 250); drawModes(); drawModeBar();
 
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();

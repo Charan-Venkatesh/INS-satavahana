@@ -318,10 +318,10 @@ function symText(text, x, y, size = 15) {
 const GATE_ON = new T.Color('#1f9e7a'), INK_COL = new T.Color('#111518');
 function gateValve(id, x, y, title) {
   const g = new T.Group(); g.position.copy(P(x, y, SYM_Y)); scene.add(g);
-  const fillMat = new T.MeshBasicMaterial({ color: INK_COL.clone() }), state = { color: LAMP_IDLE.clone() };
+  const GLASS = new T.Color('#8fb3c6'), fillMat = new T.MeshBasicMaterial({ color: GLASS.clone(), transparent: true, opacity: .42, depthWrite: false }), state = { color: LAMP_IDLE.clone() };   // clear glass like the pipes
   const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
-  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => fillMat.color.copy(S.running ? state.color : INK_COL); }
-  for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 3.5);
+  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
+  for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
   symLine(g, 0, 0, 0, -38, 4); symLine(g, 0, -38, 44, -38, 4);               // stem up, handle bar to the right
   symText('EXHAUST', x + 10, y - 92, 15); symText('KLINKET', x + 10, y - 70, 15);
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });

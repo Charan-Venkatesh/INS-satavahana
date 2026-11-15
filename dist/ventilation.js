@@ -346,7 +346,7 @@ const PICTURE = (() => {
   const from = basis(new T.Vector3(0.1943, 0.2092, -0.9584).normalize(), new T.Vector3(0, 1, 0)), to = new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
   return new T.Quaternion().setFromRotationMatrix(to.multiply(from.transpose()));
 })();
-function blower(id, x, y, width, title, connect) {
+function blower(id, x, y, width, title, connect, mirror = false) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
   const lg = new T.Group(); lg.position.set(-width * .8, 40, -width * .42); g.add(lg);
   const p = addPart(id, 'blower', x, y, title, width, { key: id, rotor: null, speed: 0, angle: 0, group: g, lamp: lamp(lg, 10, 0) });
@@ -355,8 +355,8 @@ function blower(id, x, y, width, title, connect) {
     const inl = model.getObjectByName('Air_Inlet'), out = model.getObjectByName('Air_Outlet');
     const eye = inl ? inl.position.clone() : new T.Vector3(.2, .345, 0), flangeC = new T.Vector3(.09, out ? out.position.y : .722, -.265);
     turn.updateMatrixWorld(true); const box = new T.Box3().setFromObject(turn);
-    turn.scale.setScalar(width / (box.max.x - box.min.x)); turn.updateMatrixWorld(true);
-    const e = turn.localToWorld(eye.clone()).sub(g.position); turn.position.sub(e); turn.updateMatrixWorld(true);   // eye on (x, y) at pipe height
+    turn.scale.setScalar(width / (box.max.x - box.min.x)); if (mirror) { const mw = new T.Group(); mw.scale.x = -1; g.add(mw); mw.add(turn); } turn.updateMatrixWorld(true);
+    g.updateMatrixWorld(true); const e = turn.localToWorld(eye.clone()).sub(g.position); if (mirror) e.x = -e.x; turn.position.sub(e); turn.updateMatrixWorld(true);   // eye on (x, y) at pipe height
     const f = turn.localToWorld(flangeC.clone()), axis = new T.Vector3(0, 1, 0).applyQuaternion(PICTURE);
     p.rotor = model.getObjectByName('Rotor');
     const plan = v => [v.x + 1000, v.z + 786, v.y];
@@ -459,12 +459,11 @@ const hose = c => {
 };
 // Client: the batteries in the pit are NOT connected to the circuit. Pit air is drawn from an open intake in the pit
 // (riser at x 270) and fresh / returned air is discharged into the pit through an open outlet (x 1640).
-pipe('pitOut', 'J', 'out', [[270, 1300], [270, 1095]], 'dirty');
+pipe('pitOut', 'J', f => f.out + f.m3, [[270, 1300], [270, 1095]], 'dirty');
 pitMouth(270, 1300, 'in'); 
-pipe('J', 'v123', 'draught', [[270, 1095], [270, 1000]], 'dirty');
-pipe('v123', 'TV', 'draught', [[270, 1000], [270, 360]], 'dirty');
-pipe('TV', 'v58', 'draught', [[270, 360], [140, 360]], 'dirty');
-pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty');
+pipe('J', 'v123', f => f.draught + f.m3, [[270, 1095], [270, 1000]], 'dirty');
+pipe('v123', 'TV', f => f.draught + f.m3, [[270, 1000], [270, 360]], 'dirty');
+pipe('TV', 'v58', f => f.draught + f.m3, [[270, 360], [140, 360]], 'dirty');
 pipe('vent', 'TV', 'draught', [[300, 320], [300, 360], [270, 360]], 'room');   // open vent head joining the exhaust
 { const g = new T.Group(); g.position.copy(P(300, 312, PIPE_Y + 18)); scene.add(g); symLine(g, -22, 0, 22, 0, 6); }   // ⊤ cap on the vent end, as drawn
 pipe('J', 'H', 'header', [[270, 1095], [385, 1095]], 'dirty');
@@ -588,8 +587,8 @@ for (const o of [-5, 5]) { const d = new T.Mesh(new T.CylinderGeometry(17, 17, 3
 for (const o of [-6, 0, 6]) { const r = new T.Mesh(new T.TorusGeometry(15, 2, 8, 24), mat.dark); r.position.copy(P(385, 842 + o, PIPE_Y)); scene.add(r); }   // {⊢
 { const t = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-13, -10), new T.Vector2(13, -10), new T.Vector2(0, 14)])), new T.MeshBasicMaterial({ color: '#5d6b72' })); t.rotation.x = -Math.PI / 2; t.position.copy(P(270, 630, PIPE_Y + 18)); scene.add(t); }   // ▲
 louvre(1645, 450, 'r'); louvre(1690, 790, 'l');
-plume(60, 360, -1, 0, 'draught'); plume(1665, 450, 1, 0, 'toCompt');
-arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet'); arrow(30, 360, 'l', 'dirty', 'draught', 1);
+plume(1665, 450, 1, 0, 'toCompt');
+arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet');
 arrow(680, 750, 'l', 'room', 'qgRoom', 1); arrow(365, 345, 'l', 'room', 'draught', 1);
 arrow(360, 1345, 'l', 'dirty', 'out', 2, 40); arrow(1600, 1285, 'l', 'room', 'pitIn', 2, 40);
 
@@ -623,39 +622,54 @@ symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); sym
 symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
 symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
 
-// ---- engine room (drawing): Exhaust Blower → 126 and Standard Blower 127 → 128 meet at a junction, then 125 → □ joint
-// on the 123 riser; air goes down through 123 into the pit (Mode 3). The Air Induction Unit's outlet carries a ⊠ valve
-// symbol before the cooler (Mode 4 sketch).
-for (const n of ['JE', 'R5']) JUNCTIONS.add(n);
-Object.assign(FACE, { v125: 27, v126: 27, v128: 27 });
-const ENG = { ex: 590, std: 800, vEx: 500, vStd: 710 };
-pipe('v126', 'JE', 'ex', [[110, ENG.vEx], [190, ENG.vEx]], 'room');
-pipe('v128', 'JE', 'm3', [[110, ENG.vStd], [190, ENG.vStd], [190, ENG.vEx]], 'room');
-pipe('JE', 'v125', f => f.m3 + f.ex, [[190, ENG.vEx], [232, ENG.vEx]], 'room');
-pipe('v125', 'R5', f => f.m3 + f.ex, [[232, ENG.vEx], [270, ENG.vEx]], 'room');
-pipe('R5', 'v123', f => f.m3 + f.ex, [[270, ENG.vEx], [270, 1000]], 'room');          // down the riser to 123
-pipe('v123', 'pit3', 'm3pit', [[270, 1000], [270, 1300]], 'room');                    // on into the pit
-{ const g = new T.Group(); g.position.copy(P(270, ENG.vEx, SYM_Y)); scene.add(g); for (const [a, b, c, d] of [[-12, -12, 12, -12], [12, -12, 12, 12], [12, 12, -12, 12], [-12, 12, -12, -12]]) symLine(g, a, b, c, d, 3.5); }   // □ joint
-gateValve('v126', 110, ENG.vEx, 'Valve 126 (exhaust blower)', []);
-gateValve('v128', 110, ENG.vStd, 'Valve 128 (standard blower)', []);
-gateValve('v125', 232, ENG.vEx, 'Valve 125', []);
-blower('exb', -90, ENG.ex, 110, 'Exhaust Blower', ([fx, fy, fh], [ax, ay, ah]) => {
-  pipe('exb', 'v126', 'ex', [[fx, fy, fh], [fx, ENG.vEx, ah], [110, ENG.vEx]], 'room'); arrow(-190, ENG.ex, 'r', 'room', 'ex', 1);
-});
-blower('std', -90, ENG.std, 110, 'Standard Blower 127', ([fx, fy, fh], [ax, ay, ah]) => {
-  pipe('std', 'v128', 'm3', [[fx, fy, fh], [fx, ENG.vStd, ah], [110, ENG.vStd]], 'room'); arrow(-190, ENG.std, 'r', 'room', 'm3', 1);
-});
-symText('EXHAUST BLOWER', -90, ENG.ex + 62, 13); symText('STANDARD BLOWER 127', -90, ENG.std + 62, 13);
-symText('FROM CARBON DIOXIDE', -255, ENG.std - 40, 11); symText('AIR PURIFICATION UNIT', -255, ENG.std - 22, 11);
+// ---- engine room (original drawing): the exhaust line carries on LEFT from Klinket 58.
+// 58 → K1 (128 drops to the standard blower) → valve → Exhaust Blower → valve → X → up and out overboard (⇐).
+// X → 125 → lower line: 124 (left end) · 126 (cracked) · Standard Blower 127 blowing left; 127 draws from the right,
+// from 128 and from the CO₂ air purification unit through 129. Mode 3: pit → 123 → 58 → 128 → 127 → 125 → overboard.
+for (const n of ['K1', 'K2', 'XJ', 'LJ', 'T6']) JUNCTIONS.add(n);
+Object.assign(FACE, { v124: 24, v125: 24, v126: 20, v128: 24, v129: 27, vexA: 27, vexB: 27 });
+const TOP = 360, OUT_Y = 250, LOW = 600, SUC = 700;
+pipe('v58', 'K1', f => f.m3 + f.exq, [[140, TOP], [40, TOP]], 'dirty');
+pipe('K1', 'vexA', 'exq', [[40, TOP], [-20, TOP]], 'dirty');
+pipe('vexA', 'exb', 'exq', [[-20, TOP], [-110, TOP]], 'dirty');
+pipe('vexB', 'XJ', 'exq', [[-205, OUT_Y], [-260, OUT_Y]], 'dirty');
+pipe('XJ', 'out3', f => f.m3 + f.exq, [[-260, OUT_Y], [-260, 185], [-320, 185]], 'dirty');   // overboard
+pipe('K1', 'v128', 'm3', [[40, TOP], [40, 530]], 'dirty');
+pipe('v128', 'K2', 'm3', [[40, 530], [40, SUC]], 'dirty');
+pipe('co2', 'v129', 'co2', [[200, SUC], [120, SUC]], 'room');
+pipe('v129', 'K2', 'co2', [[120, SUC], [40, SUC]], 'room');
+pipe('K2', 'std', f => f.m3 + f.co2, [[40, SUC], [-60, SUC]], 'dirty');
+pipe('T6', 'LJ', 'm3', [[-160, LOW], [-260, LOW]], 'dirty');
+pipe('T6', 'v126', 'ex', [[-160, LOW], [-160, LOW + 55]], 'dirty');                                // cracked vent, 50 L/min
+pipe('LJ', 'v124', 'none', [[-260, LOW], [-320, LOW]], 'dirty');
+pipe('LJ', 'v125', 'm3', [[-260, LOW], [-260, 430]], 'dirty');
+pipe('v125', 'XJ', 'm3', [[-260, 430], [-260, OUT_Y]], 'dirty');
+gateValve('vexA', -20, TOP, 'Exhaust blower inlet valve', []);
+gateValve('vexB', -205, OUT_Y, 'Exhaust blower outlet valve', []);
+gateValve('v129', 120, SUC, 'Valve 129 (CO₂ unit)', []);
+valve('v128', 40, 530, true, 'Valve 128', 'right');
+valve('v125', -260, 430, true, 'Valve 125', 'left');
+valve('v124', -320, LOW, false, 'Valve 124', 'top');
+valve('v126', -160, LOW + 55, true, 'Valve 126', 'right');
+blower('exb', -110, TOP, 105, 'Exhaust Blower', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('exb', 'vexB', 'exq', [[fx, fy, fh], [fx, OUT_Y, ah], [-205, OUT_Y]], 'dirty');
+}, true);
+blower('std', -60, SUC, 105, 'Standard Blower 127', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('std', 'T6', 'm3', [[fx, fy, fh], [fx, LOW, ah], [-160, LOW]], 'dirty');
+}, true);
+plume(-322, 185, -1, 0, 'm3'); arrow(-345, 185, 'l', 'dirty', 'm3', 1); arrow(235, SUC, 'l', 'room', 'co2', 1);
+{ const g = new T.Group(); g.position.copy(P(-260, 215, SYM_Y)); scene.add(g); symLine(g, 0, 12, 0, -14, 3.5); symLine(g, 0, -16, -8, -5, 3.5); symLine(g, 0, -16, 8, -5, 3.5); }   // ↑ on the outlet
+symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -60, SUC + 72, 13);
+symText('FROM CARBON DIOXIDE', 170, SUC + 40, 11); symText('AIR PURIFICATION UNIT', 170, SUC + 58, 11);
+{ const pts = [P(-370, 150, 2), P(205, 150, 2), P(205, 1665, 2), P(-370, 1665, 2), P(-370, 150, 2)];   // dashed engine-room boundary
+  const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 { const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
   for (const [a, b, c, d] of [[-13, -13, 13, -13], [13, -13, 13, 13], [13, 13, -13, 13], [-13, 13, -13, -13], [-13, -13, 13, 13], [13, -13, -13, 13]]) symLine(g, a, b, c, d, 3); }
-{ const pts = [P(-345, 430, 2), P(240, 430, 2), P(240, 1665, 2), P(-345, 1665, 2), P(-345, 430, 2)];   // dashed engine-room boundary
-  const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 
 // ---------------------------------------------------------------- state
 const initial = () => ({
   running: false,
-  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false, v125: false, v126: false, v128: false },
+  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false, v124: false, v125: false, v126: false, v128: false, v129: false, vexA: false, vexB: false },
   flap: { a: false, b: false, g: false },
   on: { b1: false, b2: false, bg: false, aiu: false, std: false, exb: false },
   set: { b1: 1, b2: 1, bg: 1, aiu: 1, std: 1, exb: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
@@ -671,7 +685,7 @@ const stateWord = p => p.type === 'blower' ? (S.on[p.key] ? 'RUNNING' : 'STOPPED
 // running blower; it stops at the first closed one.
 const passes = n => n in S.open ? S.open[n] : n === 'fa' ? S.flap.a : n === 'fb' ? S.flap.b : n === 'fg' ? S.flap.g : n in S.on ? S.on[n] : true;
 function reach() {
-  const got = new Set(S.running ? ['pitOut', 'compt', 'vent', 'std', 'exb', 'aiu'] : []);
+  const got = new Set(S.running ? ['pitOut', 'compt', 'vent', 'co2', 'aiu'] : []);
   for (const p of pipes) p.reached = false;
   for (let changed = true; changed;) {
     changed = false;
@@ -730,7 +744,7 @@ function tap(id) {
   // Mode 1 last step: with 122 open, tapping an open 114 cracks it (part open) instead of closing it
   if (mode && id === 'v114' && S.open.v114 && S.open.v122 && !crack114) { crack114 = true; p.wheelTarget = (p.openAngle + p.closedAngle) / 2; notify('Valve 114 · CRACKED OPEN', true); return; }
   if (id === 'v114' && crack114) crack114 = false;
-  if (id === 'v126') { const open = !crack126; crack126 = open; S.open.v126 = open; S.on.exb = open; p.wheelTarget = open ? (p.openAngle + p.closedAngle) / 2 : p.closedAngle; notify('Valve 126 · ' + (open ? 'CRACKED OPEN — exhaust blower running' : 'CLOSED'), true); setTimeout(() => checkStep(id, !open), 0); return; }
+  if (id === 'v126') { const open = !crack126; crack126 = open; S.open.v126 = open; p.wheelTarget = open ? (p.openAngle + p.closedAngle) / 2 : p.closedAngle; notify('Valve 126 · ' + (open ? 'CRACKED OPEN' : 'CLOSED'), true); setTimeout(() => checkStep(id, !open), 0); return; }
   const wasOn = isOn(p);
   if (p.type === 'valve' || p.type === 'flap') {
     const store = p.type === 'valve' ? S.open : S.flap;
@@ -838,7 +852,7 @@ function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored
 // ---- every valve port number on the drawing
 const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
   ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936], ['v125', '125', 232, 545], ['v126', '126', 110, 545], ['v128', '128', 110, 755]];
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -110, LOW + 55], ['v128', '128', 88, 530], ['v129', '129', 120, 745]];
 for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
@@ -939,7 +953,7 @@ const MODE1 = [
 ];
 const MODE3 = [
   ['Open 103 (done when the mode is chosen)', () => S.flap.a || S.flap.b, ['fa', 'fb']],
-  ['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket', () => S.open.kl, ['kl']],
+  ['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket 58', () => S.open.v58, ['v58']],
   ['Open 128', () => S.open.v128, ['v128']], ['Open 125', () => S.open.v125, ['v125']],
   ['Start the Standard Blower 127', () => S.on.std, ['std']], ['Crack 126 open — tap 126', () => crack126, ['v126']]
 ];
@@ -999,7 +1013,7 @@ function checkStep(id, wasOn) {
   if (bad) warn('⚠ ' + bad);
   else if (!wasOn && !want.includes(id) && !st.slice(0, i).some(s => (typeof s[2] === 'function' ? s[2]() : s[2]).includes(id))) warn('⚠ Wrong step — next: ' + st[i][0]);
 }
-const USES = { 3: ['fa', 'fb', 'vin', 'v123', 'v125', 'v126', 'v128'], 4: ['vin', 'v123'], 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
+const USES = { 3: ['fa', 'fb', 'vin', 'v123', 'v58', 'v125', 'v126', 'v128'], 4: ['vin', 'v123'], 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
 const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
 modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
 (document.querySelector('header .top-actions') || circuit).prepend(modeBar);
@@ -1026,7 +1040,7 @@ function layout() {
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
   if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
   renderer.setSize(w, h);
-  const PW = 2320, PH = 1500, cx = 805 - 1000, cz = 962 - 786, aspect = w / h;
+  const PW = 2340, PH = 1600, cx = 795 - 1000, cz = 925 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
   Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);
@@ -1056,8 +1070,9 @@ function frame(now) {
   }
   const sp = k => S.on[k] ? parts.get(k).speed : 0;                                // a stopped blower moves no air
   flows = ventFlows({ open: S.open, flap: S.flap, speed: { b1: sp('b1'), b2: sp('b2'), bg: sp('bg') } });
-  flows.m3 = S.on.std && S.open.v128 && S.open.v125 ? 250 * sp('std') : 0; flows.ex = S.on.exb && crack126 && S.open.v125 ? 50 * sp('exb') : 0;
-  flows.m3pit = S.open.v123 ? flows.m3 + flows.ex : 0; flows.aiuQ = S.on.aiu && S.open.kl ? 250 * sp('aiu') : 0;
+  const path3 = S.open.v123 && S.open.v58 && S.open.v128 && S.open.v125;
+  flows.m3 = S.on.std && path3 ? 250 * sp('std') : 0; flows.ex = flows.m3 && crack126 ? 50 : 0; flows.co2 = S.on.std && S.open.v129 ? 120 * sp('std') : 0;
+  flows.exq = S.on.exb && S.open.vexA && S.open.vexB && S.open.v58 && S.open.v123 ? 200 * sp('exb') : 0; flows.aiuQ = S.on.aiu && S.open.kl ? 250 * sp('aiu') : 0;
   if (crack114 && S.open.v114 && S.open.v117) { flows.toCompt = flows.qm * .2; flows.recirc = flows.qm - flows.toCompt; }
   stepPit(S.pit, flows, S.running ? dt * SIM_SPEED / 3600 : 0, dt, S.running, S.burn);
   S.pit.Ta = S.pit.Tb = burnerT;            // the burners run at the temperature set in the box

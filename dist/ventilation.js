@@ -373,7 +373,7 @@ function burner(id, key, x, y, title) {
   lid.position.y = H / 2 - 1; lid.renderOrder = 9; g.add(lid);                                                                   // smoked-glass top
   const glow = sprite(glowTex, '#ff8a2a', 230, 0); glow.position.y = 10; glow.renderOrder = 9; g.add(glow);
   // top face: the band colour fills the whole burner, with its name, the temperature and COOL / WARM / HOT
-  const fc = document.createElement('canvas'); fc.width = 560; fc.height = 400; const ftex = new T.CanvasTexture(fc); ftex.colorSpace = T.SRGBColorSpace; ftex.anisotropy = 8;
+  const fc = document.createElement('canvas'); fc.width = 640; fc.height = 460; const ftex = new T.CanvasTexture(fc); ftex.colorSpace = T.SRGBColorSpace; ftex.anisotropy = 8;
   const face = new T.Mesh(new T.PlaneGeometry(W - 4, D - 4), new T.MeshBasicMaterial({ map: ftex, transparent: true, toneMapped: false }));
   face.rotation.x = -Math.PI / 2; face.position.y = H / 2 + 1.5; face.renderOrder = 10; g.add(face);
   const lg = new T.Group(); lg.position.set(66, 0, -46); g.add(lg);
@@ -712,7 +712,10 @@ showRunState();
 .mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}
 .mode-bar button:active{transform:scale(.96)}.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 0 0 4px #1d4f6e33,0 4px 14px #12405e33}
 .mode-bar button.soon{border-style:dashed;opacity:.55}
-.port-no{transition:background .3s,opacity .3s,transform .3s}.port-no.use{background:#1f7fbf;transform:translate(-50%,-50%) scale(1.12)}.port-no.dim{opacity:.35}
+.port-no{transition:background .3s,opacity .3s,transform .3s}
+.port-no em{font-style:normal;font-size:.62em;margin-left:.35em;letter-spacing:.06em;vertical-align:.12em}
+.port-no.is-open{background:#1e9e5a!important;opacity:1!important}.port-no.is-crack{background:#d98a14!important;opacity:1!important}
+.port-no.flash{animation:portFlash .5s ease-in-out 4}@keyframes portFlash{50%{box-shadow:0 0 0 .5em #1e9e5a66;scale:1.25}}.port-no.use{background:#1f7fbf;transform:translate(-50%,-50%) scale(1.12)}.port-no.dim{opacity:.35}
 .part-button.next{animation:nextRing 1.1s ease-in-out infinite;border-radius:50%}
 @keyframes nextRing{0%,100%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 0 #1f7fbf66}50%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 14px #1f7fbf00}}
 .vinfo-card{position:fixed;inset:0;background:#0b2a3d55;display:grid;place-items:center;z-index:50}
@@ -743,23 +746,59 @@ const BURN_CSS = t => t < 40 ? '#2f7fd0' : t <= 70 ? '#e07b14' : '#d8322b';
   slider.addEventListener('input', () => set(+slider.value)); minus.onclick = () => set(burnerT - 5); plus.onclick = () => set(burnerT + 5);
   pin(el, 905, 700); set(30);
 }
-function burnerLook(p, dt) {                            // body and top face follow the set temperature band
-  const c = BURN_COL(burnerT); p.mat.color.lerp(c.clone().multiplyScalar(.85), Math.min(1, dt * 5));
-  p.mat.emissive.copy(c); p.mat.emissiveIntensity = .35;
-  const key = burnerT + '', f = p.face; if (!f || f.shown === key) return; f.shown = key;
-  const g = f.c.getContext('2d'), W = f.c.width, H = f.c.height, band = burnerT < 40 ? 0 : burnerT <= 70 ? 1 : 2;
-  const col = [['#5aa9f0', '#1f63b0', '#0f3f78'], ['#ffb04a', '#e0700f', '#9a4300'], ['#ff6a5a', '#c8261c', '#7d130c']][band];
-  g.clearRect(0, 0, W, H);
-  const r = 46, rr = (x, y, w, h) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
-  const gr = g.createLinearGradient(0, 0, 0, H); gr.addColorStop(0, col[0]); gr.addColorStop(1, col[1]);
-  rr(8, 8, W - 16, H - 16); g.fillStyle = gr; g.fill(); g.lineWidth = 14; g.strokeStyle = col[2]; g.stroke();
-  g.fillStyle = 'rgba(255,255,255,.18)'; for (let row = 0; row < 2; row++) for (let i = 0; i < 6; i++) { g.beginPath(); g.arc(70 + i * 84, row ? 318 : 82, 9, 0, 7); g.fill(); }   // burner nozzles, faint
-  g.fillStyle = '#fff'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.shadowColor = 'rgba(0,0,0,.35)'; g.shadowBlur = 8;
-  g.font = 'bold 44px Arial'; g.fillText(p.label, W / 2, 84);
-  g.font = 'bold 132px Arial'; g.fillText(burnerT + '°C', W / 2, 205);
-  g.font = 'bold 46px Arial'; g.fillText(['COOL', 'WARM', 'HOT'][band], W / 2, 318);
+// Realistic burner unit seen from above: brushed-steel housing with bolts, a glass inspection window over the
+// catalyst bed with live flames, and a digital temperature display. Flame colour follows the client's bands:
+// small blue flames below 40 °C, orange flames 40–70 °C, tall red-yellow flames above 70 °C.
+const BAND_FX = [
+  { h: 46, core: '#eaf7ff', mid: '#3c9bff', bed: ['#0b1626', '#12304e'], led: '#46a8ff', word: 'COOL' },
+  { h: 112, core: '#fff3c4', mid: '#ff9418', bed: ['#1d0f05', '#5a2a08'], led: '#ffa12a', word: 'WARM' },
+  { h: 168, core: '#fff7d6', mid: '#ff3216', bed: ['#260704', '#7a1608'], led: '#ff4a32', word: 'HOT' }
+];
+const steelSheet = (() => {                            // brushed steel, drawn once and reused
+  const c = document.createElement('canvas'); c.width = 640; c.height = 460; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 640, 460); gr.addColorStop(0, '#c9d0d4'); gr.addColorStop(.5, '#9ea8ae'); gr.addColorStop(1, '#7d878d');
+  g.fillStyle = gr; g.fillRect(0, 0, 640, 460);
+  for (let i = 0; i < 900; i++) { const y = Math.random() * 460; g.strokeStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '40,48,52'},${.03 + Math.random() * .05})`; g.lineWidth = 1; g.beginPath(); g.moveTo(Math.random() * 120, y); g.lineTo(520 + Math.random() * 120, y + (Math.random() - .5) * 2); g.stroke(); }
+  return c;
+})();
+function burnerLook(p, dt) {
+  const band = burnerT < 40 ? 0 : burnerT <= 70 ? 1 : 2, fx = BAND_FX[band], now = performance.now();
+  p.mat.color.set('#59646a'); p.mat.emissive.set(fx.mid); p.mat.emissiveIntensity = [0, .12, .28][band];
+  p.glow.material.color.set(fx.mid); p.glow.material.opacity = [.05, .22, .42][band] * (.85 + .15 * Math.sin(now / 160));
+  const f = p.face; if (!f || now - (f.at || 0) < 70) return; f.at = now;      // ~14 fps flame animation
+  const g = f.c.getContext('2d'), W = f.c.width, H = f.c.height, t = now / 1000, R = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  g.clearRect(0, 0, W, H); g.save();
+  R(4, 4, W - 8, H - 8, 26); g.clip(); g.drawImage(steelSheet, 0, 0, W, H); g.restore();
+  R(4, 4, W - 8, H - 8, 26); g.lineWidth = 8; g.strokeStyle = '#3e474c'; g.stroke();
+  for (const [x, y] of [[34, 34], [W - 34, 34], [34, H - 34], [W - 34, H - 34]]) {   // hex bolts
+    const bg = g.createRadialGradient(x - 4, y - 4, 2, x, y, 15); bg.addColorStop(0, '#eef2f4'); bg.addColorStop(1, '#5d676d'); g.fillStyle = bg;
+    g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; g.lineTo(x + 14 * Math.cos(a), y + 14 * Math.sin(a)); } g.closePath(); g.fill(); g.strokeStyle = '#3e474c'; g.lineWidth = 2; g.stroke();
+  }
+  g.fillStyle = '#2f383d'; g.font = 'bold 26px Arial'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(p.label, 66, 36);
+  // inspection window
+  const wx = 62, wy = 60, ww = W - 124, wh = 250; g.save(); R(wx, wy, ww, wh, 18); g.clip();
+  const bed = g.createLinearGradient(0, wy, 0, wy + wh); bed.addColorStop(0, fx.bed[0]); bed.addColorStop(1, fx.bed[1]); g.fillStyle = bed; g.fillRect(wx, wy, ww, wh);
+  g.strokeStyle = band ? 'rgba(255,170,90,.18)' : 'rgba(120,170,230,.16)'; g.lineWidth = 2;                   // catalyst honeycomb
+  for (let row = 0, y = wy + 10; y < wy + wh; row++, y += 22) for (let x = wx + (row % 2 ? 13 : 0); x < wx + ww; x += 26) { g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + k * Math.PI / 3; g.lineTo(x + 13 * Math.cos(a), y + 13 * Math.sin(a)); } g.closePath(); g.stroke(); }
+  if (band) { const hg = g.createRadialGradient(W / 2, wy + wh, 10, W / 2, wy + wh, ww * .7); hg.addColorStop(0, band === 2 ? 'rgba(255,90,30,.55)' : 'rgba(255,150,40,.35)'); hg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = hg; g.fillRect(wx, wy, ww, wh); }
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 7; i++) {                                                     // a row of burner nozzles with flames
+    const x = wx + 42 + i * (ww - 84) / 6, base = wy + wh - 22, fl = .8 + .14 * Math.sin(t * 9 + i * 1.7) + .08 * Math.sin(t * 23 + i), h = fx.h * fl, w = 16 + fx.h * .1, sway = Math.sin(t * 5 + i * 2.1) * w * .25;
+    const fg = g.createLinearGradient(0, base, 0, base - h); fg.addColorStop(0, fx.core); fg.addColorStop(.35, fx.mid); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fg; g.globalAlpha = .9; g.beginPath(); g.moveTo(x - w, base); g.bezierCurveTo(x - w, base - h * .45, x - w * .2 + sway, base - h * .7, x + sway * 1.6, base - h);
+    g.bezierCurveTo(x + w * .2 + sway, base - h * .7, x + w, base - h * .45, x + w, base); g.closePath(); g.fill();
+    g.globalAlpha = 1; g.fillStyle = '#3a3f42'; g.fillRect(x - 9, base - 2, 18, 10);
+  }
+  g.globalCompositeOperation = 'source-over'; g.restore();
+  const glass = g.createLinearGradient(wx, wy, wx + ww, wy + wh); glass.addColorStop(0, 'rgba(255,255,255,.22)'); glass.addColorStop(.35, 'rgba(255,255,255,0)'); glass.addColorStop(.6, 'rgba(255,255,255,.07)'); glass.addColorStop(1, 'rgba(255,255,255,0)');
+  R(wx, wy, ww, wh, 18); g.fillStyle = glass; g.fill(); g.lineWidth = 10; g.strokeStyle = '#2a3236'; g.stroke();
+  // digital temperature display
+  const dx = W / 2 - 150, dy = 328, dw = 300, dh = 104; R(dx, dy, dw, dh, 12); g.fillStyle = '#0b0f11'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#2a3236'; g.stroke();
+  g.textAlign = 'center'; g.fillStyle = fx.led; g.shadowColor = fx.led; g.shadowBlur = 18; g.font = 'bold 74px "Courier New", monospace'; g.fillText(burnerT + '°C', W / 2 - 18, dy + dh / 2 + 4);
+  g.shadowBlur = 0; g.font = 'bold 22px Arial'; g.fillText(fx.word, dx + dw - 40, dy + 24);
   f.tex.needsUpdate = true;
 }
+
 
 // ---- i on the burners, cooler and filter (blowers and batteries already have theirs)
 function infoCard(title, text, rows) {
@@ -800,7 +839,8 @@ function progress() { const st = MODES[mode]?.steps || []; let i = 0; while (i <
 function chooseMode(m) {
   mode = m; crack114 = false; modeWarned = ''; allOff(); S.running = true; showRunState();
   S.flap.a = S.flap.b = true; for (const id of ['fa', 'fb']) parts.get(id).bladeTarget = 0;      // 103 opens, all other ports shut
-  notify(MODES[m].title + ' — 103 opened, all other ports closed', true); drawModes();
+  notify(MODES[m].title + ' — 103 opened, all other ports closed', true); drawModes(); drawModeBar();
+  document.querySelectorAll('.port-no').forEach((el, i) => { if (PORTS[i][0] === 'fa' || PORTS[i][0] === 'fb') { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } });
 }
 const modesEl = document.createElement('div'); modesEl.className = 'vcard modes'; modesEl.setAttribute('role', 'region'); modesEl.setAttribute('aria-label', 'Ventilation modes');
 pin(modesEl, 1180, 905);
@@ -846,7 +886,13 @@ function drawModeBar() {
   modeBar.classList.toggle('show', S.running);
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
   const use = USES[mode] || null;
-  document.querySelectorAll('.port-no').forEach((el, i) => { const id = PORTS[i][0]; el.classList.toggle('use', !!use && use.includes(id)); el.classList.toggle('dim', !!use && !use.includes(id)); });
+  document.querySelectorAll('.port-no').forEach((el, i) => {
+    const [id, n] = PORTS[i], part = id && parts.get(id), on = !!(part && S.running && isOn(part)), cr = id === 'v114' && on && crack114;
+    el.classList.toggle('use', !!use && use.includes(id)); el.classList.toggle('dim', !!use && !use.includes(id));
+    el.classList.toggle('is-open', on && !cr); el.classList.toggle('is-crack', cr);
+    const html = n + (cr ? '<em>CRACKED</em>' : on ? '<em>OPEN</em>' : '');
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
 }
 setInterval(() => { drawModes(); drawModeBar(); }, 250); drawModes(); drawModeBar();
 
@@ -905,7 +951,7 @@ function frame(now) {
     if (p.blade) p.blade.rotation.y += (p.bladeTarget - p.blade.rotation.y) * Math.min(1, dt * 6);
     if (p.type === 'burner') {
       const T0 = burnerT, k = Math.min(1, Math.max(0, (T0 - 40) / 80));
-      burnerLook(p, dt); p.glow.material.opacity = .35 * k; p.ember.material.opacity = .9 * k;
+      burnerLook(p, dt); p.ember.material.opacity = 0;
       const lit = Math.min(1, Math.max(0, (k - .08) / .6)), t = now / 1000;
       for (const n of p.nozzles) {                                                   // each flame flickers on its own
         const fl = .72 + .18 * Math.sin(t * n.sp + n.ph) + .1 * Math.sin(t * n.sp * 2.3 + n.ph * 1.7);

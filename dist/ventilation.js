@@ -295,21 +295,36 @@ function valve(id, x, y, vertical, title, side = 'top') {
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: lamp(g, 32, -10), wheel, wheelTarget: closed, closedAngle: closed, openAngle: closed + Math.sign(Math.sin(open - closed) || 1) * Math.PI / 2 });
 }
 // Exhaust Klinket 58 as a gate valve: two cones meeting point to point on the pipe, a stem and a round handwheel.
-// The cones carry the state colour (grey before Start, red closed, teal-green open); the handwheel spins when operated.
-const GATE_ON = new T.Color('#1f9e7a');
-function gateValve(id, x, y, title) {
-  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
-  const body = new T.MeshPhysicalMaterial({ color: LAMP_IDLE.clone(), roughness: .3, metalness: .1, transparent: true, opacity: .88, clearcoat: .6 });
-  for (const sgn of [-1, 1]) {                                        // cone bases outward, tips at the centre
-    const c = new T.Mesh(new T.ConeGeometry(22, 26, 32, 1, true), body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13; g.add(c);
-    const rim = new T.Mesh(new T.TorusGeometry(22, 1.6, 8, 32), new T.MeshStandardMaterial({ color: '#0f5f4a', roughness: .4 })); rim.rotation.y = Math.PI / 2; rim.position.x = sgn * 26; g.add(rim);
-  }
-  const arm = new T.Group(); arm.rotation.x = -Math.PI / 2 + .55; g.add(arm);   // stem leans toward the viewer so the wheel reads as a disc
-  const stem = new T.Mesh(new T.CylinderGeometry(2.6, 2.6, 34, 10), new T.MeshStandardMaterial({ color: '#5d6b72', metalness: .6, roughness: .4 })); stem.position.y = 17; arm.add(stem);
-  const wheel = new T.Group(); wheel.position.y = 36; arm.add(wheel);
-  wheel.add(new T.Mesh(new T.CylinderGeometry(19, 19, 4, 40), new T.MeshPhysicalMaterial({ color: '#1f8a6c', roughness: .35, clearcoat: .5 })));
-  const spoke = new T.Mesh(new T.BoxGeometry(34, 4.6, 3), new T.MeshStandardMaterial({ color: '#0f5f4a' })); spoke.position.y = 1; wheel.add(spoke);
-  return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON }, wheel, wheelTarget: 0, closedAngle: 0, openAngle: -4 * Math.PI });
+// Drawing symbols: flat black line-work lying on top of the pipes, exactly as on the supplied drawing.
+const INK = new T.MeshBasicMaterial({ color: '#111518' }), SYM_Y = PIPE_Y + 18;
+function symLine(g, x0, y0, x1, y1, w = 4) {          // a straight stroke in plan units, relative to the group
+  const L = Math.hypot(x1 - x0, y1 - y0), m = new T.Mesh(new T.PlaneGeometry(L + w, w), INK);
+  m.rotation.x = -Math.PI / 2; m.rotation.z = -Math.atan2(y1 - y0, x1 - x0); m.position.set((x0 + x1) / 2, 0, (y0 + y1) / 2); m.renderOrder = 12; g.add(m); return m;
+}
+function symFill(g, pts, matl) {                      // filled polygon (plan points, relative)
+  const sh = new T.Shape(pts.map(([x, y]) => new T.Vector2(x, -y))), m = new T.Mesh(new T.ShapeGeometry(sh), matl);
+  m.rotation.x = -Math.PI / 2; m.position.y = -.5; m.renderOrder = 11; g.add(m); return m;
+}
+function symText(text, x, y, size = 15) {
+  const c = document.createElement('canvas'), k = 8; c.width = text.length * size * k * .7 + 20; c.height = size * k * 1.3;
+  const g = c.getContext('2d'); g.font = 'bold ' + size * k + 'px "Times New Roman", serif'; g.fillStyle = '#111518'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, c.width / 2, c.height / 2);
+  const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 8;
+  const m = new T.Mesh(new T.PlaneGeometry(c.width / k, c.height / k), new T.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+  m.rotation.x = -Math.PI / 2; m.position.copy(P(x, y, SYM_Y)); m.renderOrder = 12; scene.add(m);
+}
+// Exhaust Klinket 58, as drawn: a gate valve (two triangles point to point, ▶◀) on the line, a stem rising from the
+// centre and turning right into the handle bar. The triangles are black like the drawing before Start, then carry the
+// state colour (red shut, green open) with a black outline.
+const GATE_ON = new T.Color('#1f9e7a'), INK_COL = new T.Color('#111518');
+function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET']) {
+  const g = new T.Group(); g.position.copy(P(x, y, SYM_Y)); scene.add(g);
+  const GLASS = new T.Color('#8fb3c6'), fillMat = new T.MeshBasicMaterial({ color: GLASS.clone(), transparent: true, opacity: .42, depthWrite: false }), state = { color: LAMP_IDLE.clone() };   // clear glass like the pipes
+  const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
+  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
+  for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
+  symLine(g, 0, 0, 0, -36, 4); symLine(g, 0, -36, 32, -36, 4); symLine(g, 32, -36, 32, -62, 4);   // handle as drawn: stem up, right, then up
+  words.forEach((w, i) => symText(w, x + 8, y - 86 - (words.length - 1 - i) * 22, 15));
+  return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }
 function flap(id, key, x, y, title) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
@@ -321,16 +336,17 @@ function flap(id, key, x, y, title) {
   blade.rotation.y = Math.PI / 2;
   return addPart(id, 'flap', x, y, title, 60, { key, lamp: lamp(g, 26, -10), blade, bladeTarget: Math.PI / 2 });
 }
-// The blower picture's camera (Blower Viewer: camera (1.6, 1.0, 1.15) looking at (−0.15, 0.38, −0.05), Y up) is turned onto
+// Client angle (Nov 2026): side view — perforated inlet face on the left, red outlet flange on top, motor to the right
+// (viewer orbit th = −π/2 + 0.2, ph = 1.36). Earlier: the blower picture's camera (1.6, 1.0, 1.15) was turned onto
 // this screen's top camera, so from above each blower looks exactly like the picture: volute face with the inlet eye in
 // front, motor behind on the left, red outlet flange on top. The eye sits on its suction pipe; the outlet feeds the
 // discharge pipe, which leaves upward as in the drawing.
 const PICTURE = (() => {
   const basis = (z, up) => { const x = new T.Vector3().crossVectors(up, z).normalize(), y = new T.Vector3().crossVectors(z, x); return new T.Matrix4().makeBasis(x, y, z); };
-  const from = basis(new T.Vector3(1.75, .62, 1.2).normalize(), new T.Vector3(0, 1, 0)), to = new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
+  const from = basis(new T.Vector3(0.1943, 0.2092, -0.9584).normalize(), new T.Vector3(0, 1, 0)), to = new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
   return new T.Quaternion().setFromRotationMatrix(to.multiply(from.transpose()));
 })();
-function blower(id, x, y, width, title, connect) {
+function blower(id, x, y, width, title, connect, mirror = false) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
   const lg = new T.Group(); lg.position.set(-width * .8, 40, -width * .42); g.add(lg);
   const p = addPart(id, 'blower', x, y, title, width, { key: id, rotor: null, speed: 0, angle: 0, group: g, lamp: lamp(lg, 10, 0) });
@@ -339,8 +355,8 @@ function blower(id, x, y, width, title, connect) {
     const inl = model.getObjectByName('Air_Inlet'), out = model.getObjectByName('Air_Outlet');
     const eye = inl ? inl.position.clone() : new T.Vector3(.2, .345, 0), flangeC = new T.Vector3(.09, out ? out.position.y : .722, -.265);
     turn.updateMatrixWorld(true); const box = new T.Box3().setFromObject(turn);
-    turn.scale.setScalar(width / (box.max.x - box.min.x)); turn.updateMatrixWorld(true);
-    const e = turn.localToWorld(eye.clone()).sub(g.position); turn.position.sub(e); turn.updateMatrixWorld(true);   // eye on (x, y) at pipe height
+    turn.scale.setScalar(width / (box.max.x - box.min.x)); if (mirror) { const mw = new T.Group(); mw.scale.x = -1; g.add(mw); mw.add(turn); } turn.updateMatrixWorld(true);
+    g.updateMatrixWorld(true); const e = turn.localToWorld(eye.clone()).sub(g.position); if (mirror) e.x = -e.x; turn.position.sub(e); turn.updateMatrixWorld(true);   // eye on (x, y) at pipe height
     const f = turn.localToWorld(flangeC.clone()), axis = new T.Vector3(0, 1, 0).applyQuaternion(PICTURE);
     p.rotor = model.getObjectByName('Rotor');
     const plan = v => [v.x + 1000, v.z + 786, v.y];
@@ -372,8 +388,12 @@ function burner(id, key, x, y, title) {
   const lid = new T.Mesh(new T.BoxGeometry(W - 6, 2, D - 6), new T.MeshPhysicalMaterial({ color: '#3a2a22', roughness: .05, transparent: true, opacity: .32, clearcoat: 1, depthWrite: false }));
   lid.position.y = H / 2 - 1; lid.renderOrder = 9; g.add(lid);                                                                   // smoked-glass top
   const glow = sprite(glowTex, '#ff8a2a', 230, 0); glow.position.y = 10; glow.renderOrder = 9; g.add(glow);
+  // top face: the band colour fills the whole burner, with its name, the temperature and COOL / WARM / HOT
+  const fc = document.createElement('canvas'); fc.width = 640; fc.height = 460; const ftex = new T.CanvasTexture(fc); ftex.colorSpace = T.SRGBColorSpace; ftex.anisotropy = 8;
+  const face = new T.Mesh(new T.PlaneGeometry(W - 4, D - 4), new T.MeshBasicMaterial({ map: ftex, transparent: true, toneMapped: false }));
+  face.rotation.x = -Math.PI / 2; face.position.y = H / 2 + 1.5; face.renderOrder = 10; g.add(face);
   const lg = new T.Group(); lg.position.set(66, 0, -46); g.add(lg);
-  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, nozzles, ember });
+  return addPart(id, 'burner', x, y, title, 110, { key, lamp: lamp(lg, 9, 24), mat: m, glow, nozzles, ember, face: { c: fc, tex: ftex, shown: '' }, label: title.replace('H₂ burner', 'H₂ BURNER') });
 }
 function diamond(x, y, kind) {
   const top = canvasTexture(128, (c, s) => {
@@ -396,6 +416,12 @@ const wireMat = new T.MeshStandardMaterial({ color: '#8d989f', metalness: .7, ro
 function wire(pts, r = 2.5) { const path = new T.CurvePath(); for (let i = 1; i < pts.length; i++) path.add(new T.LineCurve3(P(pts[i - 1][0], pts[i - 1][1], PIPE_Y - 4), P(pts[i][0], pts[i][1], PIPE_Y - 4))); scene.add(new T.Mesh(new T.TubeGeometry(path, pts.length * 4, r, 8, false), wireMat)); }
 function boss(x, y) { const b = new T.Mesh(new T.CylinderGeometry(5, 5, 8, 14), steel); b.position.copy(P(x, y, PIPE_Y + 14)); scene.add(b); }
 function probe(x, y) { boss(x, y); const m = new T.Mesh(new T.CylinderGeometry(6, 6, 10, 14), mat.metal); m.position.copy(P(x, y, PIPE_Y + 14)); scene.add(m); const t = new T.Mesh(new T.SphereGeometry(7, 14, 10), mat.dark); t.position.copy(P(x, y - 14, PIPE_Y + 18)); scene.add(t); wire([[x, y], [x, y - 14]], 2); }
+function pitMouth(x, y, dir) {             // flared open pipe end standing in the pit air (no connection to any cell)
+  const g = new T.Group(); g.position.copy(P(x, y + 18, PIPE_Y)); scene.add(g);
+  const bell = new T.Mesh(new T.CylinderGeometry(16, 30, 26, 32, 1, true), mat.glass); bell.rotation.x = Math.PI / 2; bell.renderOrder = 6; g.add(bell);
+  const rim = new T.Mesh(new T.TorusGeometry(30, 2.4, 8, 32), steel); rim.position.z = 13; g.add(rim);
+  const grid = new T.Mesh(new T.CircleGeometry(28, 32), new T.MeshBasicMaterial({ color: '#5d6b72', transparent: true, opacity: .35 })); grid.position.z = 12; g.add(grid);
+}
 function openEnd(x, y, rot) { const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); g.rotation.y = rot; scene.add(g); const c = new T.Mesh(new T.CylinderGeometry(4, 4, 40, 10), mat.metal); c.rotation.x = Math.PI / 2; g.add(c); }
 function checkValve(x, y) { const sh = new T.Shape([new T.Vector2(-14, -14), new T.Vector2(14, -14), new T.Vector2(0, 12)]); const m = new T.Mesh(new T.ShapeGeometry(sh), mat.dark); m.rotation.x = -Math.PI / 2; m.position.copy(P(x, y, PIPE_Y + 16)); scene.add(m); const b = new T.Mesh(new T.CylinderGeometry(16, 16, 26, 20), mat.metal); b.rotation.z = Math.PI / 2; b.position.copy(P(x, y, PIPE_Y)); scene.add(b); }
 // small round dial on a canvas (thermometers, V meter); redrawn only when the value changes
@@ -431,18 +457,15 @@ const hose = c => {
   const N = c.nip, nx = N.x + 1000, ny = N.z + 786, tx = teeX(c), h = PIPE_Y;
   return [P(tx, MAN_Y, h), P(tx - 3, MAN_Y + 26, h + 18), P(tx + 6, ny - 8, h + 26), P(nx - 20, ny + 2, N.y + 20), P(nx - 7, ny, N.y + 7), N.clone()];
 };
-left.forEach((c, i) => {
-  pipe('cellL' + i, 'ML' + i, f => f.out / 4, null, 'dirty', { r: 5.5, curve: new T.CatmullRomCurve3(hose(c).reverse()) });
-  const x = teeX(c), next = left[i + 1] ? teeX(left[i + 1]) : 270;
-  pipe('ML' + i, left[i + 1] ? 'ML' + (i + 1) : 'R0', f => f.out * (i + 1) / 4, [[x, MAN_Y], [next, MAN_Y]], 'dirty', { r: 11 });
-});
-pipe('R0', 'J', 'out', [[270, MAN_Y], [270, 1095]], 'dirty');
-for (const [x, sgn] of [[teeX(left[0]), 1], [teeX(right[right.length - 1]), -1]]) { junction('cap' + sgn, P(x + sgn * 14, MAN_Y, PIPE_Y), 11); flange(P(x + sgn * 4, MAN_Y, PIPE_Y), new T.Vector3(sgn, 0, 0), 11); }   // rounded glass blind ends
-pipe('J', 'v123', 'draught', [[270, 1095], [270, 1000]], 'dirty');
-pipe('v123', 'TV', 'draught', [[270, 1000], [270, 360]], 'dirty');
-pipe('TV', 'v58', 'draught', [[270, 360], [140, 360]], 'dirty');
-pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty');
+// Client: the batteries in the pit are NOT connected to the circuit. Pit air is drawn from an open intake in the pit
+// (riser at x 270) and fresh / returned air is discharged into the pit through an open outlet (x 1640).
+pipe('pitOut', 'J', f => f.out + f.m3, [[270, 1300], [270, 1095]], 'dirty');
+pitMouth(270, 1300, 'in'); 
+pipe('J', 'v123', f => f.draught + f.m3, [[270, 1095], [270, 1000]], 'dirty');
+pipe('v123', 'TV', f => f.draught + f.m3, [[270, 1000], [270, 360]], 'dirty');
+pipe('TV', 'v58', f => f.draught + f.m3, [[270, 360], [140, 360]], 'dirty');
 pipe('vent', 'TV', 'draught', [[300, 320], [300, 360], [270, 360]], 'room');   // open vent head joining the exhaust
+{ const g = new T.Group(); g.position.copy(P(300, 312, PIPE_Y + 18)); scene.add(g); symLine(g, -22, 0, 22, 0, 6); }   // ⊤ cap on the vent end, as drawn
 pipe('J', 'H', 'header', [[270, 1095], [385, 1095]], 'dirty');
 pipe('H', 'v122', 'qm', [[385, 1095], [385, 1000]], 'dirty');
 pipe('H', 'v134', 'qgPit', [[385, 1095], [520, 1095], [520, 990]], 'dirty');
@@ -469,12 +492,8 @@ pipe('chk', 'J4', 'recirc', [[1595, 1020], [1640, 1020]], 'clean');
 // fresh compartment air → inlet valve → pit
 pipe('compt', 'vin', 'inlet', [[1675, 790], [1640, 790], [1640, 950]], 'room');
 pipe('vin', 'J4', 'inlet', [[1640, 950], [1640, 1020]], 'room');
-pipe('J4', 'MR0', 'pitIn', [[1640, 1020], [1640, MAN_Y]], 'room');
-right.forEach((c, i) => {
-  const x = teeX(c), from = i ? teeX(right[i - 1]) : 1640;
-  pipe('MR' + i, 'MR' + (i + 1), f => (f.inlet + f.recirc) * (4 - i) / 4, [[from, MAN_Y], [x, MAN_Y]], 'room', { r: 11 });
-  pipe('MR' + (i + 1), 'cellR' + i, f => (f.inlet + f.recirc) / 4, null, 'room', { r: 5.5, curve: new T.CatmullRomCurve3(hose(c)) });
-});
+pipe('J4', 'pitIn', 'pitIn', [[1640, 1020], [1640, 1300]], 'room');
+pitMouth(1640, 1300, 'out');
 // galley: compartment → galley flap (the 134 and blower pipes are added once the blower model is placed)
 pipe('compt', 'fg', 'qgRoom', [[625, 750], [560, 750], [560, 825]], 'room');
 
@@ -485,7 +504,7 @@ valve('v109', 1140, 420, false, 'Valve 109');
 valve('v110', 1150, 555, false, 'Valve 110');
 valve('v114', 1580, 450, false, 'Valve 114');
 valve('v117', 1545, 960, true, 'Valve 117', 'left');
-valve('vin', 1640, 950, true, 'Inlet valve', 'right');
+valve('vin', 1640, 950, true, 'Valve 118 (inlet from outside)', 'right');
 valve('v134', 520, 990, true, 'Valve 134', 'right');
 flap('fa', 'a', 490, 440, 'Flap 103 (burner 1)');
 flap('fb', 'b', 490, 585, 'Flap 103 (burner 2)');
@@ -502,16 +521,16 @@ function inletDuct(pts) {
   const path = roundedPath(pts.slice(1)); glassTube(new T.TubeGeometry(path, 48, 12, 16, false));
   const [x, y] = pts[pts.length - 1]; flange(P(x, y, PIPE_Y + 3), new T.Vector3(0, 1, 0), 12);
 }
-blower('b1', 1300, 420, 118, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v109', 'b1', 'q1', suction(1140, 420, 1300, h), 'clean'); inletDuct(suction(1140, 420, 1300, h));
+blower('b1', 1300, 420, 140, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v109', 'b1', 'q1', [[1140, 420], [1300, 420]], 'clean'); flange(P(1298, 420, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b1', 'J3', 'q1', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // as drawn: out of the top, straight right, down to the common line
 });
-blower('b2', 1300, 555, 118, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v110', 'b2', 'q2', suction(1150, 555, 1300, h), 'clean'); inletDuct(suction(1150, 555, 1300, h));
+blower('b2', 1300, 555, 140, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v110', 'b2', 'q2', [[1150, 555], [1300, 555]], 'clean'); flange(P(1298, 555, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b2', 'J3', 'q2', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // out of the top, straight right, up to the common line
 });
-blower('bg', 650, 880, 100, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v134', 'bg', 'qgPit', [[520, 990], [520, 880], ...suction(560, 880, 650, h)], 'dirty'); inletDuct(suction(560, 880, 650, h));
+blower('bg', 650, 880, 122, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v134', 'bg', 'qgPit', [[520, 990], [520, 880], [650, 880]], 'dirty'); flange(P(648, 880, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('fg', 'bg', 'qgRoom', [[560, 825], [560, 880]], 'room');
   junction('GJ', P(560, 880, PIPE_Y), 13);                                        // tee where the galley flap line joins the suction
   pipe('bg', 'galley', 'qg', [[fx, fy, fh], [ax, ay, ah], [780, ay, ah]], 'dirty');   // straight right to the galley
@@ -520,18 +539,40 @@ blower('bg', 650, 880, 100, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => 
 });
 const filterBox = diamond(385, 760, 'filter'); diamond(910, 512, 'cool');
 const FILTER_IDLE = new T.Color('#8e9ca3'), filterCol = FILTER_IDLE.clone();
-{ // 101 · H₂ sensor, as drawn ( –⊏‖–| ): a stub off the pipe, a flange pair, the sensor cup opening outward, a short tail
-  const dark = new T.MeshStandardMaterial({ color: '#2f383d', metalness: .5, roughness: .45 }), y = 890, h = PIPE_Y;
-  const bar = (x0, x1, r, m) => { const c = new T.Mesh(new T.CylinderGeometry(r, r, Math.abs(x1 - x0), 12), m); c.rotation.z = Math.PI / 2; c.position.copy(P((x0 + x1) / 2, y, h)); scene.add(c); };
-  bar(373, 357, 3.5, steel);                                                         // stub from the pipe wall
-  for (const x of [356, 351]) { const d = new T.Mesh(new T.CylinderGeometry(10, 10, 2.6, 24), steel); d.rotation.z = Math.PI / 2; d.position.copy(P(x, y, h)); scene.add(d); }   // ‖ flange pair
-  bar(350, 345, 3.5, steel);
-  const cup = new T.Group(); cup.position.copy(P(337, y, h)); scene.add(cup);          // ⊏ sensor cup, open to the left
-  for (const [w, d, ox, oz] of [[3, 24, 7, 0], [15, 3, 0, -10.5], [15, 3, 0, 10.5]]) { const b = new T.Mesh(new T.BoxGeometry(w, 16, d), dark); b.position.set(ox, 0, oz); cup.add(b); }
-  const core = new T.Mesh(new T.BoxGeometry(10, 12, 16), new T.MeshStandardMaterial({ color: '#7d8a91', metalness: .4, roughness: .5 })); core.position.x = 1; cup.add(core);
-  bar(330, 318, 2.4, dark);                                                          // – tail
+{ // 101 · H₂ sensor, as drawn ( -ᑕ‖—| ): short tail, a cup open to the right, a double bar, then the line into the pipe
+  const g = new T.Group(); g.position.copy(P(0, 890, SYM_Y)); scene.add(g);
+  symLine(g, 318, 0, 328, 0, 3.5);                                   // tail
+  symLine(g, 330, -11, 330, 11, 3.5); symLine(g, 330, -11, 342, -11, 3.5); symLine(g, 330, 11, 342, 11, 3.5);   // ᑕ
+  symLine(g, 347, -13, 347, 13, 3.5); symLine(g, 352, -13, 352, 13, 3.5);                                      // ‖
+  symLine(g, 352, 0, 372, 0, 3.5);                                   // into the pipe
 }
-const thermo = [dial(632, 690), dial(694, 690)];                                 // thermometers across burner 2 (in / out)
+// Burner temperature gauges (client): a 0–150 °C dial with the blue / orange / red bands, a needle that sweeps to the
+// burner temperature and a live °C readout. Left = burner 1, right = burner 2. Drawn on a flat face so it reads upright.
+function tempGauge(x, y, tag) {
+  const c = document.createElement('canvas'); c.width = c.height = 512; const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = 8;
+  const R = 29, rim = new T.Mesh(new T.CylinderGeometry(R + 3, R + 3, 8, 40), new T.MeshStandardMaterial({ color: '#c9d2d7', metalness: .75, roughness: .3 }));
+  rim.position.copy(P(x, y, PIPE_Y)); scene.add(rim);
+  const face = new T.Mesh(new T.CircleGeometry(R, 48), new T.MeshBasicMaterial({ map: tex, toneMapped: false }));
+  face.rotation.x = -Math.PI / 2; face.position.copy(P(x, y, PIPE_Y + 4.2)); face.renderOrder = 3; scene.add(face);
+  let shown = -1, cur = EST.ambient;
+  const A = v => (-225 + Math.min(150, Math.max(0, v)) / 150 * 270) * Math.PI / 180;   // 0 °C bottom-left → 150 °C bottom-right
+  return (target, dt) => {
+    cur += (target - cur) * Math.min(1, dt * 3);                                   // needle eases so the change is visible
+    const key = Math.round(cur * 2) / 2; if (key === shown) return; shown = key;
+    const g = c.getContext('2d'), m = 256; g.clearRect(0, 0, 512, 512);
+    g.fillStyle = '#fbfcfd'; g.beginPath(); g.arc(m, m, 250, 0, 7); g.fill(); g.lineWidth = 12; g.strokeStyle = '#26323a'; g.stroke();
+    for (const [a, b, col] of [[0, 40, '#2f7fd0'], [40, 70, '#f08a24'], [70, 150, '#d8322b']]) { g.beginPath(); g.arc(m, m, 205, A(a), A(b)); g.lineWidth = 26; g.strokeStyle = col; g.stroke(); }
+    g.strokeStyle = '#26323a'; g.fillStyle = '#26323a'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let v = 0; v <= 150; v += 10) { const a = A(v), big = v % 50 === 0, r1 = big ? 165 : 180; g.lineWidth = big ? 7 : 4; g.beginPath(); g.moveTo(m + 218 * Math.cos(a), m + 218 * Math.sin(a)); g.lineTo(m + r1 * Math.cos(a), m + r1 * Math.sin(a)); g.stroke(); if (big) { g.font = 'bold 38px Arial'; g.fillText(v, m + 132 * Math.cos(a), m + 132 * Math.sin(a)); } }
+    const col = cur < 40 ? '#2f7fd0' : cur <= 70 ? '#e07b14' : '#d8322b';
+    g.font = 'bold 40px Arial'; g.fillStyle = '#4a5a64'; g.fillText(tag, m, m - 70);
+    g.font = 'bold 66px Arial'; g.fillStyle = col; g.fillText(Math.round(cur) + '°C', m, m + 118);
+    const a = A(cur); g.strokeStyle = '#c8261c'; g.lineWidth = 12; g.lineCap = 'round'; g.beginPath(); g.moveTo(m - 40 * Math.cos(a), m - 40 * Math.sin(a)); g.lineTo(m + 190 * Math.cos(a), m + 190 * Math.sin(a)); g.stroke();
+    g.fillStyle = '#26323a'; g.beginPath(); g.arc(m, m, 22, 0, 7); g.fill();
+    tex.needsUpdate = true;
+  };
+}
+const thermo = [tempGauge(632, 690, 'B1'), tempGauge(694, 690, 'B2')];                // burner 1 / burner 2 temperature
 wire([[580, 585], [580, 690], [612, 690]]); wire([[652, 690], [674, 690]]); wire([[714, 690], [745, 690], [745, 585]]);
 wire([[845, 512], [845, 345], [877, 345]]); wire([[917, 345], [950, 345], [950, 512]]);   // V meter across the cooler
 const vDial = dial(897, 345, 'V');
@@ -546,18 +587,92 @@ for (const o of [-5, 5]) { const d = new T.Mesh(new T.CylinderGeometry(17, 17, 3
 for (const o of [-6, 0, 6]) { const r = new T.Mesh(new T.TorusGeometry(15, 2, 8, 24), mat.dark); r.position.copy(P(385, 842 + o, PIPE_Y)); scene.add(r); }   // {⊢
 { const t = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-13, -10), new T.Vector2(13, -10), new T.Vector2(0, 14)])), new T.MeshBasicMaterial({ color: '#5d6b72' })); t.rotation.x = -Math.PI / 2; t.position.copy(P(270, 630, PIPE_Y + 18)); scene.add(t); }   // ▲
 louvre(1645, 450, 'r'); louvre(1690, 790, 'l');
-plume(60, 360, -1, 0, 'draught'); plume(1665, 450, 1, 0, 'toCompt');
-arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet'); arrow(30, 360, 'l', 'dirty', 'draught', 1);
+plume(1665, 450, 1, 0, 'toCompt');
+arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet');
 arrow(680, 750, 'l', 'room', 'qgRoom', 1); arrow(365, 345, 'l', 'room', 'draught', 1);
 arrow(360, 1345, 'l', 'dirty', 'out', 2, 40); arrow(1600, 1285, 'l', 'room', 'pitIn', 2, 40);
+
+// ---- below the battery pit (client sketch + drawing): Air Induction Unit → cooler 806 4C → duct along the bottom.
+// M/R valve at the left end, through the engine room (E/R) to the Klinket, under the pit with three outlets up into
+// the pit (↑), and the E/R valve at the right end. Air in this line comes with Modes 3 / 4.
+const DUCT_Y = 1600;
+for (const n of ['J5', 'D1', 'D2', 'D3']) JUNCTIONS.add(n);
+Object.assign(FACE, { vmr: 24, ver: 24, kl: 27, aclr: 50 });
+pipe('vmr', 'J5', 'aiuQ', [[-270, DUCT_Y], [-60, DUCT_Y]], 'room');
+pipe('aclr', 'J5', 'aiuQ', [[-60, 1460], [-60, DUCT_Y]], 'room');
+pipe('J5', 'kl', 'aiuQ', [[-60, DUCT_Y], [380, DUCT_Y]], 'room');
+pipe('kl', 'D1', 'aiuQ', [[380, DUCT_Y], [620, DUCT_Y]], 'room');
+pipe('D1', 'D2', 'aiuQ', [[620, DUCT_Y], [1000, DUCT_Y]], 'room');
+pipe('D2', 'D3', 'aiuQ', [[1000, DUCT_Y], [1380, DUCT_Y]], 'room');
+pipe('D3', 'ver', 'aiuQ', [[1380, DUCT_Y], [1880, DUCT_Y]], 'room');
+for (const [i, x] of [[1, 620], [2, 1000], [3, 1380]]) {
+  pipe('D' + i, 'pitUp' + i, 'aiuQ', [[x, DUCT_Y], [x, 1548]], 'room');
+  const g = new T.Group(); g.position.copy(P(x, 1528, SYM_Y)); scene.add(g);            // ↑ outlet into the pit, as drawn
+  symLine(g, 0, 18, 0, -14, 4); symLine(g, 0, -16, -9, -4, 4); symLine(g, 0, -16, 9, -4, 4);
+}
+valve('vmr', -270, DUCT_Y, false, 'M/R valve', 'bottom');
+valve('ver', 1880, DUCT_Y, false, 'E/R valve', 'bottom');
+gateValve('kl', 380, DUCT_Y, 'Klinket', ['KLINKET']);
+diamond(-60, 1460, 'cool');
+blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');
+  arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
+});
+symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
+symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
+symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
+
+// ---- engine room (original drawing): the exhaust line carries on LEFT from Klinket 58.
+// 58 → K1 (128 drops to the standard blower) → valve → Exhaust Blower → valve → X → up and out overboard (⇐).
+// X → 125 → lower line: 124 (left end) · 126 (cracked) · Standard Blower 127 blowing left; 127 draws from the right,
+// from 128 and from the CO₂ air purification unit through 129. Mode 3: pit → 123 → 58 → 128 → 127 → 125 → overboard.
+for (const n of ['K1', 'K2', 'XJ', 'LJ', 'T6']) JUNCTIONS.add(n);
+Object.assign(FACE, { v124: 24, v125: 24, v126: 20, v128: 24, v129: 27, vexA: 27, vexB: 27 });
+const TOP = 360, OUT_Y = 250, LOW = 600, SUC = 700;
+pipe('v58', 'K1', f => f.m3 + f.exq, [[140, TOP], [40, TOP]], 'dirty');
+pipe('K1', 'vexA', 'exq', [[40, TOP], [-20, TOP]], 'dirty');
+pipe('vexA', 'exb', 'exq', [[-20, TOP], [-110, TOP]], 'dirty');
+pipe('vexB', 'XJ', 'exq', [[-205, OUT_Y], [-260, OUT_Y]], 'dirty');
+pipe('XJ', 'out3', f => f.m3 + f.exq, [[-260, OUT_Y], [-260, 185], [-320, 185]], 'dirty');   // overboard
+pipe('K1', 'v128', 'm3', [[40, TOP], [40, 530]], 'dirty');
+pipe('v128', 'K2', 'm3', [[40, 530], [40, SUC]], 'dirty');
+pipe('co2', 'v129', 'co2', [[200, SUC], [120, SUC]], 'room');
+pipe('v129', 'K2', 'co2', [[120, SUC], [40, SUC]], 'room');
+pipe('K2', 'std', f => f.m3 + f.co2, [[40, SUC], [-60, SUC]], 'dirty');
+pipe('T6', 'LJ', 'm3', [[-160, LOW], [-260, LOW]], 'dirty');
+pipe('T6', 'v126', 'ex', [[-160, LOW], [-160, LOW + 55]], 'dirty');                                // cracked vent, 50 L/min
+pipe('LJ', 'v124', 'none', [[-260, LOW], [-320, LOW]], 'dirty');
+pipe('LJ', 'v125', 'm3', [[-260, LOW], [-260, 430]], 'dirty');
+pipe('v125', 'XJ', 'm3', [[-260, 430], [-260, OUT_Y]], 'dirty');
+gateValve('vexA', -20, TOP, 'Exhaust blower inlet valve', []);
+gateValve('vexB', -205, OUT_Y, 'Exhaust blower outlet valve', []);
+gateValve('v129', 120, SUC, 'Valve 129 (CO₂ unit)', []);
+valve('v128', 40, 530, true, 'Valve 128', 'right');
+valve('v125', -260, 430, true, 'Valve 125', 'left');
+valve('v124', -320, LOW, false, 'Valve 124', 'top');
+valve('v126', -160, LOW + 55, true, 'Valve 126', 'right');
+blower('exb', -110, TOP, 105, 'Exhaust Blower', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('exb', 'vexB', 'exq', [[fx, fy, fh], [fx, OUT_Y, ah], [-205, OUT_Y]], 'dirty');
+}, true);
+blower('std', -60, SUC, 105, 'Standard Blower 127', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('std', 'T6', 'm3', [[fx, fy, fh], [fx, LOW, ah], [-160, LOW]], 'dirty');
+}, true);
+plume(-322, 185, -1, 0, 'm3'); arrow(-345, 185, 'l', 'dirty', 'm3', 1); arrow(235, SUC, 'l', 'room', 'co2', 1);
+{ const g = new T.Group(); g.position.copy(P(-260, 215, SYM_Y)); scene.add(g); symLine(g, 0, 12, 0, -14, 3.5); symLine(g, 0, -16, -8, -5, 3.5); symLine(g, 0, -16, 8, -5, 3.5); }   // ↑ on the outlet
+symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -60, SUC + 72, 13);
+symText('FROM CARBON DIOXIDE', 170, SUC + 40, 11); symText('AIR PURIFICATION UNIT', 170, SUC + 58, 11);
+{ const pts = [P(-370, 150, 2), P(205, 150, 2), P(205, 1665, 2), P(-370, 1665, 2), P(-370, 150, 2)];   // dashed engine-room boundary
+  const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
+{ const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
+  for (const [a, b, c, d] of [[-13, -13, 13, -13], [13, -13, 13, 13], [13, 13, -13, 13], [-13, 13, -13, -13], [-13, -13, 13, 13], [13, -13, -13, 13]]) symLine(g, a, b, c, d, 3); }
 
 // ---------------------------------------------------------------- state
 const initial = () => ({
   running: false,
-  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false },
+  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false, v124: false, v125: false, v126: false, v128: false, v129: false, vexA: false, vexB: false },
   flap: { a: false, b: false, g: false },
-  on: { b1: false, b2: false, bg: false },
-  set: { b1: 1, b2: 1, bg: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
+  on: { b1: false, b2: false, bg: false, aiu: false, std: false, exb: false },
+  set: { b1: 1, b2: 1, bg: 1, aiu: 1, std: 1, exb: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
   burn: { a: false, b: false },
   pit: { h2: 0, Ta: EST.ambient, Tb: EST.ambient, Tcool: EST.ambient, after: 0, burnt: 0 }
 });
@@ -570,7 +685,7 @@ const stateWord = p => p.type === 'blower' ? (S.on[p.key] ? 'RUNNING' : 'STOPPED
 // running blower; it stops at the first closed one.
 const passes = n => n in S.open ? S.open[n] : n === 'fa' ? S.flap.a : n === 'fb' ? S.flap.b : n === 'fg' ? S.flap.g : n in S.on ? S.on[n] : true;
 function reach() {
-  const got = new Set(S.running ? ['cellL0', 'cellL1', 'cellL2', 'cellL3', 'compt', 'vent'] : []);
+  const got = new Set(S.running ? ['pitOut', 'compt', 'vent', 'co2', 'aiu'] : []);
   for (const p of pipes) p.reached = false;
   for (let changed = true; changed;) {
     changed = false;
@@ -597,9 +712,10 @@ function notify(msg, info = false) { warnEl.textContent = msg; warnEl.className 
 const warn = msg => notify(msg);
 
 // ---------------------------------------------------------------- operating rules
-const NAMES = { v58: '58', v123: '123', v122: '122', v134: '134', v109: '109', v110: '110', v114: '114', v117: '117', vin: 'the INLET valve' };
+const NAMES = { v58: '58', v123: '123', v122: '122', v134: '134', v109: '109', v110: '110', v114: '114', v117: '117', vin: '118' };
 function missingFor(k) {
   const o = S.open, f = S.flap, m = [];
+  if (k === 'aiu' || k === 'std' || k === 'exb') return m;
   if (k === 'bg') { if (!o.v134 && !f.g) m.push('134 or the galley flap'); return m; }
   if (!o.v122) m.push('122'); if (!f.a && !f.b) m.push('a FLAP 103');
   if (k === 'b1' && !o.v109) m.push('109'); if (k === 'b2' && !o.v110) m.push('110'); if (!o.v114 && !o.v117) m.push('114 or 117');
@@ -624,22 +740,28 @@ const tapAt = {};
 function tap(id) {
   const now = performance.now(); if (now - (tapAt[id] ?? -1e9) < 450) return; tapAt[id] = now;
   const p = parts.get(id);
-  if (!S.running) { warn('⚠ Circuit is OFF — press Start first.'); return; }
+  if (!S.running) { warn('⚠ Circuit is OFF — choose a mode or press Start first.'); return; }
+  // Mode 1 last step: with 122 open, tapping an open 114 cracks it (part open) instead of closing it
+  if (mode && id === 'v114' && S.open.v114 && S.open.v122 && !crack114) { crack114 = true; p.wheelTarget = (p.openAngle + p.closedAngle) / 2; notify('Valve 114 · CRACKED OPEN', true); return; }
+  if (id === 'v114' && crack114) crack114 = false;
+  if (id === 'v126') { const open = !crack126; crack126 = open; S.open.v126 = open; p.wheelTarget = open ? (p.openAngle + p.closedAngle) / 2 : p.closedAngle; notify('Valve 126 · ' + (open ? 'CRACKED OPEN' : 'CLOSED'), true); setTimeout(() => checkStep(id, !open), 0); return; }
+  const wasOn = isOn(p);
   if (p.type === 'valve' || p.type === 'flap') {
     const store = p.type === 'valve' ? S.open : S.flap;
     if (store[p.key]) { const b = closeBlocker(p); if (b) { warn('⚠ ' + b); return; } }
     store[p.key] = !store[p.key];
     if (p.wheel) p.wheelTarget = store[p.key] ? p.openAngle : p.closedAngle; if (p.blade) p.bladeTarget = store[p.key] ? 0 : Math.PI / 2;
   } else if (p.type === 'blower') {
-    if (!S.on[p.key]) { const m = missingFor(p.key); if (m.length) { warn('⚠ ' + p.title + ' cannot start — open ' + m.join(', ') + ' first.'); return; } }
+    if (!S.on[p.key] && !mode) { const m = missingFor(p.key); if (m.length) { warn('⚠ ' + p.title + ' cannot start — open ' + m.join(', ') + ' first.'); return; } }
     S.on[p.key] = !S.on[p.key];
-    if (S.on[p.key] && p.key !== 'bg' && !S.open.vin && !S.open.v117) setTimeout(() => S.on[p.key] && !S.open.vin && !S.open.v117 && warn('⚠ INLET valve is closed — the pit cannot draw fresh air.'), 1500);
+    if (S.on[p.key] && p.key !== 'bg' && !S.open.vin && !S.open.v117) setTimeout(() => S.on[p.key] && !S.open.vin && !S.open.v117 && warn('⚠ 118 is closed — the pit cannot draw fresh air.'), 1500);
   } else if (p.type === 'burner') {
     S.burn[p.key] = !S.burn[p.key];
     const q = p.key === 'a' ? flows.qa : flows.qb;
     if (S.burn[p.key] && q <= 0) { warn('⚠ ' + p.title + ' is ON but has no air — open 122 and its FLAP 103, and run a blower.'); return; }
   }
   notify(p.title + ' · ' + stateWord(p), true);
+  setTimeout(() => checkStep(id, wasOn), 0);
 }
 // ---------------------------------------------------------------- i on the major parts: the blower viewer for each blower,
 // and the battery cell view from screen 1 for each battery bank
@@ -665,9 +787,250 @@ function allOff() {
   for (const p of parts.values()) { if (p.wheel) p.wheelTarget = p.closedAngle; if (p.blade) p.bladeTarget = Math.PI / 2; }
 }
 function showRunState() { startBtn.innerHTML = S.running ? '<span>Ⅱ</span> Pause' : '<span>▶</span> Start'; startBtn.setAttribute('aria-pressed', String(S.running)); }
-startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) allOff(); showRunState(); });     // Pause: everything closes and stops, as on screen 1
-resetBtn?.addEventListener('click', () => { S.running = false; allOff(); Object.assign(S.pit, initial().pit); showRunState(); notify('Circuit reset — all valves closed, H₂ cleared.', true); });
+startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) { allOff(); mode = 0; crack114 = crack126 = false; } showRunState(); });     // Pause: everything closes and stops, as on screen 1
+resetBtn?.addEventListener('click', () => { S.running = false; mode = 0; crack114 = crack126 = false; allOff(); Object.assign(S.pit, initial().pit); showRunState(); notify('Circuit reset — all valves closed, H₂ cleared.', true); });
 showRunState();
+
+
+// ================================================================ client requirements · screen 2 (Nov 2026)
+{
+  const st = document.createElement('style');
+  st.textContent = `
+.port-no{position:absolute;transform:translate(-50%,-50%);pointer-events:none;font:700 clamp(10px,calc(var(--k,1)*22px),30px)/1 Arial,sans-serif;color:#fff;background:#1d4f6e;border:2px solid #fff;border-radius:.5em;padding:.18em .42em;box-shadow:0 .15em .5em #0b2a3d55;white-space:nowrap;z-index:3}
+.port-no.dim{background:#6b8494}
+.vcard{position:absolute;font-family:Arial,sans-serif;color:#173f57;background:linear-gradient(180deg,#ffffffee,#eef5faee);border:1.5px solid #9dbcd2;border-radius:1em;box-shadow:0 .5em 1.6em #12405e26;pointer-events:auto;z-index:4}
+.btemp{transform:translate(-50%,-50%);font-size:clamp(7px,calc(var(--k,1)*14px),26px);width:15em;padding:.7em .9em .8em;text-align:center}
+.btemp h3,.modes h3{margin:0 0 .35em;font-size:.8em;letter-spacing:.14em;color:#3c6680}
+.btemp .tv{font:700 2em/1.1 Arial;color:#2f7fd0;transition:color .3s}.btemp .tv small{font-size:.45em;margin-left:.15em}
+.btemp .row{display:flex;gap:.4em;align-items:center;margin-top:.45em}.btemp input{flex:1;min-width:0;accent-color:#d8622b;height:1.8em}
+.btemp button{width:2.3em;height:2.3em;border-radius:.6em;border:1px solid #a9c4d6;background:#fff;font:700 1.1em/1 Arial;color:#1d4d6b;padding:0}
+.btemp .scale{display:flex;height:.45em;border-radius:.3em;overflow:hidden;margin-top:.5em}.btemp .scale i{flex:40}.btemp .scale i:nth-child(2){flex:30}.btemp .scale i:nth-child(3){flex:50}
+.btemp .lg{display:flex;justify-content:space-between;font-size:.68em;color:#56778c;margin-top:.2em}
+.modes{transform:translate(-50%,-50%);font-size:clamp(7px,calc(var(--k,1)*14px),26px);width:27em;padding:.8em 1em 1em}
+.modes .tabs{display:grid;grid-template-columns:repeat(5,1fr);gap:.35em;margin-bottom:.6em}
+.modes .tabs button{min-height:3.2em;border-radius:.6em;border:1px solid #a9c4d6;background:#fff;color:#1d4d6b;font:700 .82em/1.15 Arial;padding:.2em}
+.modes .tabs button small{display:block;font-weight:400;font-size:.82em;color:#5a7586}
+.modes .tabs button.on{background:#1d4f6e;border-color:#1d4f6e;color:#fff}.modes .tabs button.on small{color:#cfe3f0}
+.modes .tabs button:disabled{opacity:.45}
+.modes ol{list-style:none;margin:0;padding:0;display:grid;gap:.3em}
+.modes li{display:flex;gap:.6em;align-items:center;padding:.42em .6em;border-radius:.55em;background:#f3f7fa;color:#5a7586;font-size:.95em}
+.modes li b{flex:0 0 auto;width:1.7em;height:1.7em;border-radius:50%;display:grid;place-items:center;background:#d5e2ea;color:#4a6577;font-size:.85em}
+.modes li.done{color:#126b3c;background:#e6f6ec}.modes li.done b{background:#22a35a;color:#fff}
+.modes li.now{color:#0f4566;background:#e1effa;outline:2px solid #1f7fbf;font-weight:700}.modes li.now b{background:#1f7fbf;color:#fff}
+.modes .msg{margin-top:.55em;padding:.5em .7em;border-radius:.55em;font-weight:700;font-size:.92em;display:none}
+.modes .msg.ok{display:block;background:#e3f6ea;color:#126b3c}.modes .msg.bad{display:block;background:#fdecea;color:#a8322a}
+.modes .hint{font-size:.8em;color:#5a7586;margin:.1em 0 .5em}
+.modes .cur{font-size:1em;color:#0f4566;line-height:1.35}.modes .cur b{color:#1f7fbf;margin-right:.3em}
+.modes .dots{display:flex;gap:.35em;margin-top:.5em}.modes .dots i{width:.75em;height:.75em;border-radius:50%;background:#d5e2ea}.modes .dots i.d{background:#22a35a}.modes .dots i.n{background:#1f7fbf;box-shadow:0 0 0 .2em #1f7fbf44}
+.tap-tip{position:absolute;transform:translate(-50%,-100%);pointer-events:none;z-index:6;font:700 clamp(10px,calc(var(--k,1)*15px),28px)/1.25 Arial,sans-serif;background:#1f7fbf;color:#fff;padding:.45em .75em;border-radius:.7em;box-shadow:0 .4em 1.2em #0b2a3d55;max-width:16em;text-align:center;animation:tipBob 1.2s ease-in-out infinite}
+.tap-tip b{display:block;letter-spacing:.06em}.tap-tip span{display:block;font-weight:400;font-size:.82em;opacity:.95}
+.tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
+@keyframes tipBob{50%{translate:0 -.35em}}
+.mode-bar{display:none;gap:8px;font-family:Arial,sans-serif;margin-right:6px}
+body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:translateY(-50%)!important}
+.mode-bar.show{display:flex;animation:fadeIn .35s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.mode-bar button{font-size:clamp(12px,.85vw,22px)!important;min-width:clamp(78px,5.6vw,170px);min-height:clamp(46px,3vw,80px);text-align:center;padding:4px 10px;border-radius:10px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
+.mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}
+.mode-bar button:active{transform:scale(.96)}.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 0 0 4px #1d4f6e33,0 4px 14px #12405e33}
+.mode-bar button.soon{border-style:dashed;opacity:.55}
+.port-no{transition:background .3s,opacity .3s,transform .3s}
+.port-no em{font-style:normal;font-size:.62em;margin-left:.35em;letter-spacing:.06em;vertical-align:.12em}
+.port-no.is-open{background:#1e9e5a!important;opacity:1!important}.port-no.is-crack{background:#d98a14!important;opacity:1!important}
+.port-no.flash{animation:portFlash .5s ease-in-out 4}@keyframes portFlash{50%{box-shadow:0 0 0 .5em #1e9e5a66;scale:1.25}}.port-no.use{background:#1f7fbf;transform:translate(-50%,-50%) scale(1.12)}.port-no.dim{opacity:.35}
+.part-button.next{animation:nextRing 1.1s ease-in-out infinite;border-radius:50%}
+@keyframes nextRing{0%,100%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 0 #1f7fbf66}50%{box-shadow:0 0 0 3px #1f7fbf,0 0 0 14px #1f7fbf00}}
+.vinfo-card{position:fixed;inset:0;background:#0b2a3d55;display:grid;place-items:center;z-index:50}
+.vinfo-card>div{width:min(460px,92vw);background:#fff;border-radius:16px;padding:20px 22px;font:15px/1.5 Arial,sans-serif;color:#173f57;box-shadow:0 20px 60px #0008}
+.vinfo-card h2{margin:0 0 6px;font-size:20px}.vinfo-card p{margin:6px 0;color:#3f5f72}.vinfo-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0}.vinfo-card dt{color:#5a7586}.vinfo-card dd{margin:0;font-weight:700;text-align:right}
+.vinfo-card button{margin-top:8px;width:100%;height:46px;border-radius:10px;border:0;background:#1d4f6e;color:#fff;font:700 15px Arial}
+@media(max-width:700px){.modes,.btemp{display:none}}`;
+  document.head.append(st);
+}
+const anchored = [];                                    // HTML pinned to plan points (repositioned in layout)
+function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored.push(a); return a; }
+
+// ---- every valve port number on the drawing
+const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
+  ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -110, LOW + 55], ['v128', '128', 88, 530], ['v129', '129', 120, 745]];
+for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
+
+// ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
+let burnerT = 30;
+const BURN_COL = t => t < 40 ? new T.Color('#2f7fd0') : t <= 70 ? new T.Color('#f08a24') : new T.Color('#d8322b');
+const BURN_CSS = t => t < 40 ? '#2f7fd0' : t <= 70 ? '#e07b14' : '#d8322b';
+{
+  const el = document.createElement('div'); el.className = 'vcard btemp'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Burner temperature');
+  el.innerHTML = '<h3>BURNER TEMPERATURE</h3><div class="tv"><span>30</span><small>°C</small></div><div class="row"><button type="button" aria-label="Lower temperature">−</button><input type="range" min="0" max="150" step="1" value="30" aria-label="Burner temperature, °C"><button type="button" aria-label="Raise temperature">+</button></div><div class="scale"><i style="background:#2f7fd0"></i><i style="background:#f08a24"></i><i style="background:#d8322b"></i></div><div class="lg"><span>&lt;40 blue</span><span>40–70 orange</span><span>&gt;70 red</span></div>';
+  const [minus, plus] = el.querySelectorAll('button'), slider = el.querySelector('input'), tv = el.querySelector('.tv');
+  const set = v => { burnerT = Math.max(0, Math.min(150, Math.round(v))); slider.value = burnerT; tv.firstChild.textContent = burnerT; tv.style.color = BURN_CSS(burnerT); };
+  slider.addEventListener('input', () => set(+slider.value)); minus.onclick = () => set(burnerT - 5); plus.onclick = () => set(burnerT + 5);
+  pin(el, 905, 700); set(30);
+}
+// Realistic burner unit seen from above: brushed-steel housing with bolts, a glass inspection window over the
+// catalyst bed with live flames, and a digital temperature display. Flame colour follows the client's bands:
+// small blue flames below 40 °C, orange flames 40–70 °C, tall red-yellow flames above 70 °C.
+const BAND_FX = [
+  { h: 46, core: '#eaf7ff', mid: '#3c9bff', bed: ['#0b1626', '#12304e'], led: '#46a8ff', word: 'COOL' },
+  { h: 112, core: '#fff3c4', mid: '#ff9418', bed: ['#1d0f05', '#5a2a08'], led: '#ffa12a', word: 'WARM' },
+  { h: 168, core: '#fff7d6', mid: '#ff3216', bed: ['#260704', '#7a1608'], led: '#ff4a32', word: 'HOT' }
+];
+const steelSheet = (() => {                            // brushed steel, drawn once and reused
+  const c = document.createElement('canvas'); c.width = 640; c.height = 460; const g = c.getContext('2d');
+  const gr = g.createLinearGradient(0, 0, 640, 460); gr.addColorStop(0, '#c9d0d4'); gr.addColorStop(.5, '#9ea8ae'); gr.addColorStop(1, '#7d878d');
+  g.fillStyle = gr; g.fillRect(0, 0, 640, 460);
+  for (let i = 0; i < 900; i++) { const y = Math.random() * 460; g.strokeStyle = `rgba(${Math.random() < .5 ? '255,255,255' : '40,48,52'},${.03 + Math.random() * .05})`; g.lineWidth = 1; g.beginPath(); g.moveTo(Math.random() * 120, y); g.lineTo(520 + Math.random() * 120, y + (Math.random() - .5) * 2); g.stroke(); }
+  return c;
+})();
+function burnerLook(p, dt) {
+  const band = burnerT < 40 ? 0 : burnerT <= 70 ? 1 : 2, fx = BAND_FX[band], now = performance.now();
+  p.mat.color.set('#59646a'); p.mat.emissive.set(fx.mid); p.mat.emissiveIntensity = [0, .12, .28][band];
+  p.glow.material.color.set(fx.mid); p.glow.material.opacity = [.05, .22, .42][band] * (.85 + .15 * Math.sin(now / 160));
+  const f = p.face; if (!f || now - (f.at || 0) < 70) return; f.at = now;      // ~14 fps flame animation
+  const g = f.c.getContext('2d'), W = f.c.width, H = f.c.height, t = now / 1000, R = (x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+  g.clearRect(0, 0, W, H); g.save();
+  R(4, 4, W - 8, H - 8, 26); g.clip(); g.drawImage(steelSheet, 0, 0, W, H); g.restore();
+  R(4, 4, W - 8, H - 8, 26); g.lineWidth = 8; g.strokeStyle = '#3e474c'; g.stroke();
+  for (const [x, y] of [[34, 34], [W - 34, 34], [34, H - 34], [W - 34, H - 34]]) {   // hex bolts
+    const bg = g.createRadialGradient(x - 4, y - 4, 2, x, y, 15); bg.addColorStop(0, '#eef2f4'); bg.addColorStop(1, '#5d676d'); g.fillStyle = bg;
+    g.beginPath(); for (let k = 0; k < 6; k++) { const a = k * Math.PI / 3; g.lineTo(x + 14 * Math.cos(a), y + 14 * Math.sin(a)); } g.closePath(); g.fill(); g.strokeStyle = '#3e474c'; g.lineWidth = 2; g.stroke();
+  }
+  g.fillStyle = '#2f383d'; g.font = 'bold 26px Arial'; g.textAlign = 'left'; g.textBaseline = 'middle'; g.fillText(p.label, 66, 36);
+  // inspection window
+  const wx = 62, wy = 60, ww = W - 124, wh = 250; g.save(); R(wx, wy, ww, wh, 18); g.clip();
+  const bed = g.createLinearGradient(0, wy, 0, wy + wh); bed.addColorStop(0, fx.bed[0]); bed.addColorStop(1, fx.bed[1]); g.fillStyle = bed; g.fillRect(wx, wy, ww, wh);
+  g.strokeStyle = band ? 'rgba(255,170,90,.18)' : 'rgba(120,170,230,.16)'; g.lineWidth = 2;                   // catalyst honeycomb
+  for (let row = 0, y = wy + 10; y < wy + wh; row++, y += 22) for (let x = wx + (row % 2 ? 13 : 0); x < wx + ww; x += 26) { g.beginPath(); for (let k = 0; k < 6; k++) { const a = Math.PI / 6 + k * Math.PI / 3; g.lineTo(x + 13 * Math.cos(a), y + 13 * Math.sin(a)); } g.closePath(); g.stroke(); }
+  if (band) { const hg = g.createRadialGradient(W / 2, wy + wh, 10, W / 2, wy + wh, ww * .7); hg.addColorStop(0, band === 2 ? 'rgba(255,90,30,.55)' : 'rgba(255,150,40,.35)'); hg.addColorStop(1, 'rgba(0,0,0,0)'); g.fillStyle = hg; g.fillRect(wx, wy, ww, wh); }
+  g.globalCompositeOperation = 'lighter';
+  for (let i = 0; i < 7; i++) {                                                     // a row of burner nozzles with flames
+    const x = wx + 42 + i * (ww - 84) / 6, base = wy + wh - 22, fl = .8 + .14 * Math.sin(t * 9 + i * 1.7) + .08 * Math.sin(t * 23 + i), h = fx.h * fl, w = 16 + fx.h * .1, sway = Math.sin(t * 5 + i * 2.1) * w * .25;
+    const fg = g.createLinearGradient(0, base, 0, base - h); fg.addColorStop(0, fx.core); fg.addColorStop(.35, fx.mid); fg.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = fg; g.globalAlpha = .9; g.beginPath(); g.moveTo(x - w, base); g.bezierCurveTo(x - w, base - h * .45, x - w * .2 + sway, base - h * .7, x + sway * 1.6, base - h);
+    g.bezierCurveTo(x + w * .2 + sway, base - h * .7, x + w, base - h * .45, x + w, base); g.closePath(); g.fill();
+    g.globalAlpha = 1; g.fillStyle = '#3a3f42'; g.fillRect(x - 9, base - 2, 18, 10);
+  }
+  g.globalCompositeOperation = 'source-over'; g.restore();
+  const glass = g.createLinearGradient(wx, wy, wx + ww, wy + wh); glass.addColorStop(0, 'rgba(255,255,255,.22)'); glass.addColorStop(.35, 'rgba(255,255,255,0)'); glass.addColorStop(.6, 'rgba(255,255,255,.07)'); glass.addColorStop(1, 'rgba(255,255,255,0)');
+  R(wx, wy, ww, wh, 18); g.fillStyle = glass; g.fill(); g.lineWidth = 10; g.strokeStyle = '#2a3236'; g.stroke();
+  // digital temperature display
+  const dx = W / 2 - 150, dy = 328, dw = 300, dh = 104; R(dx, dy, dw, dh, 12); g.fillStyle = '#0b0f11'; g.fill(); g.lineWidth = 5; g.strokeStyle = '#2a3236'; g.stroke();
+  g.textAlign = 'center'; g.fillStyle = fx.led; g.shadowColor = fx.led; g.shadowBlur = 18; g.font = 'bold 74px "Courier New", monospace'; g.fillText(burnerT + '°C', W / 2 - 18, dy + dh / 2 + 4);
+  g.shadowBlur = 0; g.font = 'bold 22px Arial'; g.fillText(fx.word, dx + dw - 40, dy + 24);
+  f.tex.needsUpdate = true;
+}
+
+
+// ---- i on the burners, cooler and filter (blowers and batteries already have theirs)
+function infoCard(title, text, rows) {
+  const w = document.createElement('div'); w.className = 'vinfo-card'; w.setAttribute('role', 'dialog'); w.setAttribute('aria-label', title);
+  const draw = () => '<div><h2>' + title + '</h2><p>' + text + '</p><dl>' + rows().map(([a, b]) => '<dt>' + a + '</dt><dd>' + b + '</dd>').join('') + '</dl><button type="button">Close</button></div>';
+  w.innerHTML = draw(); document.body.append(w); const t = setInterval(() => { const sc = w.querySelector('dl'); if (sc) sc.outerHTML = '<dl>' + rows().map(([a, b]) => '<dt>' + a + '</dt><dd>' + b + '</dd>').join('') + '</dl>'; }, 400);
+  const close = () => { clearInterval(t); w.remove(); }; w.addEventListener('click', e => { if (e.target === w || e.target.tagName === 'BUTTON') close(); });
+}
+const tempWord = t => t < 40 ? 'Blue · below 40 °C' : t <= 70 ? 'Orange · 40–70 °C' : 'Red · above 70 °C';
+const MORE_INFO = [
+  ['h1', 572, 400, () => infoCard('H₂ burner 1', 'Catalytic hydrogen burner. Pit air passes through it after FLAP 103 and the hydrogen given off by the batteries is recombined with oxygen, which heats the air.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qa) + ' m³/h'], ['Flap 103', S.flap.a ? 'OPEN' : 'CLOSED']])],
+  ['h2', 582, 545, () => infoCard('H₂ burner 2', 'Second catalytic hydrogen burner, in parallel with burner 1 behind its own FLAP 103.', () => [['Set temperature', burnerT + ' °C'], ['Colour', tempWord(burnerT)], ['Air through it', Math.round(flows.qb) + ' m³/h'], ['Flap 103', S.flap.b ? 'OPEN' : 'CLOSED']])],
+  ['clr', 960, 470, () => infoCard('Cooler', 'Air cooler after the burners. It takes the heat added by the burners back out before the air reaches blowers 1 and 2 (valves 109 / 110).', () => [['Air through it', Math.round(flows.qm) + ' m³/h'], ['Outlet temperature', Math.round(S.pit.Tcool) + ' °C'], ['Air velocity (V)', flows.velocity.toFixed(1) + ' m/s']])],
+  ['flt', 440, 720, () => infoCard('Filter', 'Filter on the suction line after valve 122. It cleans the pit air before the H₂ burners.', () => [['Valve 122', S.open.v122 ? 'OPEN' : 'CLOSED'], ['Air through it', Math.round(flows.qm) + ' m³/h']])]
+].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
+SPOTS.push(...MORE_INFO);
+
+// ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
+// Mode 1 · closed: 103 open (everything else shut) → one blower: 109 + Blower 1 or 110 + Blower 2 → 114 → 117 → 122 → crack 114.
+// Mode 2 · into compartment: Mode 1, then open 118.   Mode 5 · urgent dive: Mode 1, then open 134 and start the galley blower.
+let mode = 0, crack114 = false, crack126 = false, modeWarned = '';
+const pair = () => (S.open.v109 && S.on.b1) || (S.open.v110 && S.on.b2);
+const MODE1 = [
+  ['Open 103 (done when the mode is chosen)', () => S.flap.a || S.flap.b, ['fa', 'fb']],
+  ['Open 109 (for Blower 1) or 110 (for Blower 2)', () => S.open.v109 || S.open.v110, ['v109', 'v110']],
+  ['Run the matching blower — 109 → Blower 1, 110 → Blower 2', pair, () => S.open.v109 ? ['b1'] : S.open.v110 ? ['b2'] : ['b1', 'b2']],
+  ['Open 114', () => S.open.v114, ['v114']],
+  ['Open 117', () => S.open.v117, ['v117']],
+  ['Open 122', () => S.open.v122, ['v122']],
+  ['Crack 114 open — tap 114 again', () => crack114, ['v114']]
+];
+const MODE3 = [
+  ['Open 103 (done when the mode is chosen)', () => S.flap.a || S.flap.b, ['fa', 'fb']],
+  ['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket 58', () => S.open.v58, ['v58']],
+  ['Open 128', () => S.open.v128, ['v128']], ['Open 125', () => S.open.v125, ['v125']],
+  ['Start the Standard Blower 127', () => S.on.std, ['std']], ['Crack 126 open — tap 126', () => crack126, ['v126']]
+];
+const MODE4 = [['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket', () => S.open.kl, ['kl']], ['Start the Air Induction Unit blower', () => S.on.aiu, ['aiu']]];
+const MODES = {
+  3: { name: 'Supply & exhaust', title: 'Mode 3 · Ventilation of battery by supply and exhaust blower', steps: MODE3, note: 'In the tubes 250 L/min · out 50 L/min' },
+  4: { name: 'Standard blower', title: 'Mode 4 · Ventilation of battery by standard blower', steps: MODE4 },
+  1: { name: 'Closed', title: 'Mode 1 · Ventilation of battery in closed', steps: MODE1 },
+  2: { name: 'Into compt', title: 'Mode 2 · Ventilation of battery into compartment', steps: [...MODE1, ['Open 118 — air from outside', () => S.open.vin, ['vin']]] },
+  5: { name: 'Urgent dive', title: 'Mode 5 · Ventilation of battery during urgent dive', steps: [...MODE1, ['Open 134', () => S.open.v134, ['v134']], ['Start the galley blower', () => S.on.bg, ['bg']]] }
+};
+function progress() { const st = MODES[mode]?.steps || []; let i = 0; while (i < st.length && st[i][1]()) i++; return { st, i }; }
+function chooseMode(m) {
+  mode = m; crack114 = crack126 = false; modeWarned = ''; allOff(); S.running = true; showRunState();
+  if (m !== 4) { S.flap.a = S.flap.b = true; for (const id of ['fa', 'fb']) parts.get(id).bladeTarget = 0; }      // 103 opens (Modes 1, 2, 3, 5), all other ports shut
+  notify(MODES[m].title + (m === 4 ? ' — all ports closed' : ' — 103 opened, all other ports closed'), true); drawModes(); drawModeBar();
+  document.querySelectorAll('.port-no').forEach((el, i) => { if (PORTS[i][0] === 'fa' || PORTS[i][0] === 'fb') { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } });
+}
+const modesEl = document.createElement('div'); modesEl.className = 'vcard modes'; modesEl.setAttribute('role', 'region'); modesEl.setAttribute('aria-label', 'Ventilation modes');
+pin(modesEl, 1180, 905);
+const tapTips = [];
+function drawModes() {
+  const { st, i } = progress(), m = MODES[mode];
+  const tab = (k, name, dis) => '<button type="button" data-m="' + k + '"' + (mode == k ? ' class="on"' : '') + (dis ? ' disabled title="Comes with the engine-room section"' : '') + '>Mode ' + k + '<small>' + name + '</small></button>';
+  let html = '<h3>BATTERY PIT VENTILATION' + (m ? ' · MODE ' + mode : '') + '</h3>';
+  if (!S.running) html += '<div class="hint">Press ▶ Start, then choose a mode (1–5) at the top of the screen.</div>';
+  else if (!m) html += '<div class="hint">Choose a mode at the top of the screen: Mode 1, 2, 3, 4 or 5.</div>';
+  else {
+    html += '<div class="hint">' + m.title + '</div><div class="cur">' + (i < st.length ? '<b>Step ' + (i + 1) + ' / ' + st.length + '</b> ' + st[i][0] : '') + '</div><div class="dots">' + st.map((_, k) => '<i class="' + (k < i ? 'd' : k === i ? 'n' : '') + '"></i>').join('') + '</div>';
+    const bad = wrongProcess();
+    html += bad ? '<div class="msg bad">⚠ ' + bad + '</div>' : i >= st.length ? '<div class="msg ok">✓ ' + m.title.split(' · ')[1] + ' — complete' + (m.note ? '<br>' + m.note : '') + '</div>' : '';
+  }
+  if (html !== modesEl._html) { modesEl._html = html; modesEl.innerHTML = html; modesEl.querySelectorAll('[data-m]').forEach(b => b.onclick = () => chooseMode(+b.dataset.m)); }
+  // pulse the part(s) to touch next
+  const nextIds = m && i < st.length ? (typeof st[i][2] === 'function' ? st[i][2]() : st[i][2]) : [];
+  for (const p of parts.values()) p.button.classList.toggle('next', nextIds.includes(p.id));
+  const text = m && i < st.length ? st[i][0].replace(/ \(done.*\)/, '') : '';
+  nextIds.forEach((id, k) => { let c = tapTips[k]; if (!c) { c = tapTips[k] = document.createElement('div'); c.className = 'tap-tip'; labelsRoot.append(c); c._a = pin(c, 0, 0); }
+    const part = parts.get(id); c._a.x = part.x; c._a.y = part.y - part.size * .55 - 30; const h = '<b>👆 TAP HERE</b><span>' + text + '</span>'; if (c.innerHTML !== h) c.innerHTML = h; c.style.display = ''; });
+  for (let k = nextIds.length; k < tapTips.length; k++) tapTips[k].style.display = 'none';
+  for (const c of tapTips) if (c.style.display !== 'none') { const [sx, sy] = screenPoint(c._a.x, c._a.y, 80); c.style.left = sx + 'px'; c.style.top = sy + 'px'; }
+}
+function wrongProcess() {
+  if (!mode) return '';
+  if (S.on.b1 && S.on.b2) return 'Both blowers running — operate a single blower (1 or 2).';
+  if (S.open.v109 && S.on.b2 && !S.open.v110) return 'Wrong process: 109 is open but Blower 2 is running — 109 goes with Blower 1.';
+  if (S.open.v110 && S.on.b1 && !S.open.v109) return 'Wrong process: 110 is open but Blower 1 is running — 110 goes with Blower 2.';
+  if (S.open.v109 && S.open.v110) return 'Open only one of 109 / 110 for the single running blower.';
+  return '';
+}
+// a tap out of order is still carried out, but flagged as the wrong step
+function checkStep(id, wasOn) {
+  if (!mode) return;
+  const { st, i } = progress(); if (i >= st.length) { const bad = wrongProcess(); if (bad) warn('⚠ ' + bad); return; }
+  const want = typeof st[i][2] === 'function' ? st[i][2]() : st[i][2];
+  const bad = wrongProcess();
+  if (bad) warn('⚠ ' + bad);
+  else if (!wasOn && !want.includes(id) && !st.slice(0, i).some(s => (typeof s[2] === 'function' ? s[2]() : s[2]).includes(id))) warn('⚠ Wrong step — next: ' + st[i][0]);
+}
+const USES = { 3: ['fa', 'fb', 'vin', 'v123', 'v58', 'v125', 'v126', 'v128'], 4: ['vin', 'v123'], 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
+const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
+modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
+(document.querySelector('header .top-actions') || circuit).prepend(modeBar);
+modeBar.querySelectorAll('button').forEach(b => b.onclick = () => { const k = +b.dataset.m; if (!MODES[k]) { notify('Mode ' + k + ' will be added with the engine-room section.', true); return; } chooseMode(k); });
+function drawModeBar() {
+  modeBar.classList.toggle('show', S.running); document.body.classList.toggle('modes-on', S.running);
+  modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
+  const use = USES[mode] || null;
+  document.querySelectorAll('.port-no').forEach((el, i) => {
+    const [id, n] = PORTS[i], part = id && parts.get(id), on = !!(part && S.running && isOn(part)), cr = on && ((id === 'v114' && crack114) || (id === 'v126' && crack126));
+    el.classList.toggle('use', !!use && use.includes(id)); el.classList.toggle('dim', !!use && !use.includes(id));
+    el.classList.toggle('is-open', on && !cr); el.classList.toggle('is-crack', cr);
+    const html = n + (cr ? '<em>CRACKED</em>' : on ? '<em>OPEN</em>' : '');
+    if (el.innerHTML !== html) el.innerHTML = html;
+  });
+}
+setInterval(() => { drawModes(); drawModeBar(); }, 250); drawModes(); drawModeBar();
 
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();
@@ -677,7 +1040,7 @@ function layout() {
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
   if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
   renderer.setSize(w, h);
-  const PW = 1940, PH = 1340, cx = 990 - 1000, cz = 895 - 786, aspect = w / h;
+  const PW = 2340, PH = 1600, cx = 795 - 1000, cz = 925 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
   Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);
@@ -686,6 +1049,8 @@ function layout() {
     Object.assign(p.button.style, { left: sx + 'px', top: sy + 'px', width: s + 'px', height: s + 'px', minWidth: '44px', minHeight: '44px' });
   }
   for (const o of SPOTS) { const [sx, sy] = screenPoint(o.x, o.y, 80); Object.assign(o.button.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const a of anchored) { const [sx, sy] = screenPoint(a.x, a.y, 80); Object.assign(a.el.style, { left: sx + 'px', top: sy + 'px' }); }
+  circuit.style.setProperty('--k', String(pxPerUnit));
 }
 new ResizeObserver(layout).observe(host);
 window.visualViewport?.addEventListener('resize', layout);
@@ -705,7 +1070,12 @@ function frame(now) {
   }
   const sp = k => S.on[k] ? parts.get(k).speed : 0;                                // a stopped blower moves no air
   flows = ventFlows({ open: S.open, flap: S.flap, speed: { b1: sp('b1'), b2: sp('b2'), bg: sp('bg') } });
+  const path3 = S.open.v123 && S.open.v58 && S.open.v128 && S.open.v125;
+  flows.m3 = S.on.std && path3 ? 250 * sp('std') : 0; flows.ex = flows.m3 && crack126 ? 50 : 0; flows.co2 = S.on.std && S.open.v129 ? 120 * sp('std') : 0;
+  flows.exq = S.on.exb && S.open.vexA && S.open.vexB && S.open.v58 && S.open.v123 ? 200 * sp('exb') : 0; flows.aiuQ = S.on.aiu && S.open.kl ? 250 * sp('aiu') : 0;
+  if (crack114 && S.open.v114 && S.open.v117) { flows.toCompt = flows.qm * .2; flows.recirc = flows.qm - flows.toCompt; }
   stepPit(S.pit, flows, S.running ? dt * SIM_SPEED / 3600 : 0, dt, S.running, S.burn);
+  S.pit.Ta = S.pit.Tb = burnerT;            // the burners run at the temperature set in the box
   reach();
 
   // pipes and arrows
@@ -719,8 +1089,8 @@ function frame(now) {
     if (p.wheel) p.wheel.rotation.y += (p.wheelTarget - p.wheel.rotation.y) * Math.min(1, dt * 6);
     if (p.blade) p.blade.rotation.y += (p.bladeTarget - p.blade.rotation.y) * Math.min(1, dt * 6);
     if (p.type === 'burner') {
-      const T0 = p.key === 'a' ? S.pit.Ta : S.pit.Tb, k = Math.min(1, Math.max(0, (T0 - EST.ambient) / 110));
-      p.mat.emissiveIntensity = .9 * k; p.glow.material.opacity = .35 * k; p.ember.material.opacity = .9 * k;
+      const T0 = burnerT, k = Math.min(1, Math.max(0, (T0 - 40) / 80));
+      burnerLook(p, dt); p.ember.material.opacity = 0;
       const lit = Math.min(1, Math.max(0, (k - .08) / .6)), t = now / 1000;
       for (const n of p.nozzles) {                                                   // each flame flickers on its own
         const fl = .72 + .18 * Math.sin(t * n.sp + n.ph) + .1 * Math.sin(t * n.sp * 2.3 + n.ph * 1.7);
@@ -731,7 +1101,7 @@ function frame(now) {
     const target = !S.running ? LAMP_IDLE : isOn(p) ? (p.lamp.on || LAMP_ON) : LAMP_OFF;
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
-  thermo[0](EST.ambient); thermo[1](S.pit.Tb); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler
+  thermo[0](burnerT, dt); thermo[1](burnerT, dt); vDial(flows.velocity * 30);       // burner 2 in (pit air) / out; V across the cooler
   filterCol.lerp(!S.running ? FILTER_IDLE : S.open.v122 ? LAMP_ON : LAMP_OFF, Math.min(1, dt * 6));
   filterBox.face.color.copy(filterCol); filterBox.side.color.copy(filterCol).multiplyScalar(.7);
   for (const pl of plumes) plumeUpdate(pl, dt, flowOf(pl.key));

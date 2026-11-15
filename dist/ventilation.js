@@ -936,6 +936,8 @@ const MORE_INFO = [
   ['flt', 440, 720, () => infoCard('Filter', 'Filter on the suction line after valve 122. It cleans the pit air before the H₂ burners.', () => [['Valve 122', S.open.v122 ? 'OPEN' : 'CLOSED'], ['Air through it', Math.round(flows.qm) + ' m³/h']])]
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 SPOTS.push(...MORE_INFO);
+SPOTS.push(...[['exb', -55, 412, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', -5, 752, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
+  ['aiu', -175, 1382, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
 
 // ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
 // Mode 1 · closed: 103 open (everything else shut) → one blower: 109 + Blower 1 or 110 + Blower 2 → 114 → 117 → 122 → crack 114.

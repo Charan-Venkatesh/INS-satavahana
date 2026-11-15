@@ -322,8 +322,8 @@ function gateValve(id, x, y, title) {
   const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
   for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
   for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
-  symLine(g, 0, 0, 0, -38, 4); symLine(g, 0, -38, 44, -38, 4);               // stem up, handle bar to the right
-  symText('EXHAUST', x + 10, y - 92, 15); symText('KLINKET', x + 10, y - 70, 15);
+  symLine(g, 0, 0, 0, -36, 4); symLine(g, 0, -36, 32, -36, 4); symLine(g, 32, -36, 32, -62, 4);   // handle as drawn: stem up, right, then up
+  symText('EXHAUST', x + 8, y - 108, 15); symText('KLINKET', x + 8, y - 86, 15);
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }
 function flap(id, key, x, y, title) {
@@ -466,6 +466,7 @@ pipe('v123', 'TV', 'draught', [[270, 1000], [270, 360]], 'dirty');
 pipe('TV', 'v58', 'draught', [[270, 360], [140, 360]], 'dirty');
 pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty');
 pipe('vent', 'TV', 'draught', [[300, 320], [300, 360], [270, 360]], 'room');   // open vent head joining the exhaust
+{ const g = new T.Group(); g.position.copy(P(300, 312, PIPE_Y + 18)); scene.add(g); symLine(g, -22, 0, 22, 0, 6); }   // ⊤ cap on the vent end, as drawn
 pipe('J', 'H', 'header', [[270, 1095], [385, 1095]], 'dirty');
 pipe('H', 'v122', 'qm', [[385, 1095], [385, 1000]], 'dirty');
 pipe('H', 'v134', 'qgPit', [[385, 1095], [520, 1095], [520, 990]], 'dirty');

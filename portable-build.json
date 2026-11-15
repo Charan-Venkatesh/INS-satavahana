@@ -11,7 +11,7 @@
     "assets/battery-photo-top.jpg",
     "assets/icon-192.png"
   ],
-  "service_worker_cache": "battery-3d-61e3c1e51aa094c0",
+  "service_worker_cache": "battery-3d-788c78f0a70ad4e1",
   "cached_assets": 29,
   "no_external_runtime_dependencies": true
 }

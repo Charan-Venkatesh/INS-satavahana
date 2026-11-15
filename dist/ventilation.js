@@ -620,16 +620,45 @@ blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', ([fx, fy, fh], [ax, 
   arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
 });
 symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
-symText('ENGINE ROOM', -150, 1215, 16); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
+symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
 symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
+
+// ---- engine room (drawing): Exhaust Blower → 126 and Standard Blower 127 → 128 meet at a junction, then 125 → □ joint
+// on the 123 riser; air goes down through 123 into the pit (Mode 3). The Air Induction Unit's outlet carries a ⊠ valve
+// symbol before the cooler (Mode 4 sketch).
+for (const n of ['JE', 'R5']) JUNCTIONS.add(n);
+Object.assign(FACE, { v125: 27, v126: 27, v128: 27 });
+const ENG = { ex: 590, std: 800, vEx: 500, vStd: 710 };
+pipe('v126', 'JE', 'ex', [[110, ENG.vEx], [190, ENG.vEx]], 'room');
+pipe('v128', 'JE', 'm3', [[110, ENG.vStd], [190, ENG.vStd], [190, ENG.vEx]], 'room');
+pipe('JE', 'v125', f => f.m3 + f.ex, [[190, ENG.vEx], [232, ENG.vEx]], 'room');
+pipe('v125', 'R5', f => f.m3 + f.ex, [[232, ENG.vEx], [270, ENG.vEx]], 'room');
+pipe('R5', 'v123', f => f.m3 + f.ex, [[270, ENG.vEx], [270, 1000]], 'room');          // down the riser to 123
+pipe('v123', 'pit3', 'm3pit', [[270, 1000], [270, 1300]], 'room');                    // on into the pit
+{ const g = new T.Group(); g.position.copy(P(270, ENG.vEx, SYM_Y)); scene.add(g); for (const [a, b, c, d] of [[-12, -12, 12, -12], [12, -12, 12, 12], [12, 12, -12, 12], [-12, 12, -12, -12]]) symLine(g, a, b, c, d, 3.5); }   // □ joint
+gateValve('v126', 110, ENG.vEx, 'Valve 126 (exhaust blower)', []);
+gateValve('v128', 110, ENG.vStd, 'Valve 128 (standard blower)', []);
+gateValve('v125', 232, ENG.vEx, 'Valve 125', []);
+blower('exb', -90, ENG.ex, 110, 'Exhaust Blower', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('exb', 'v126', 'ex', [[fx, fy, fh], [fx, ENG.vEx, ah], [110, ENG.vEx]], 'room'); arrow(-190, ENG.ex, 'r', 'room', 'ex', 1);
+});
+blower('std', -90, ENG.std, 110, 'Standard Blower 127', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('std', 'v128', 'm3', [[fx, fy, fh], [fx, ENG.vStd, ah], [110, ENG.vStd]], 'room'); arrow(-190, ENG.std, 'r', 'room', 'm3', 1);
+});
+symText('EXHAUST BLOWER', -90, ENG.ex + 62, 13); symText('STANDARD BLOWER 127', -90, ENG.std + 62, 13);
+symText('FROM CARBON DIOXIDE', -255, ENG.std - 40, 11); symText('AIR PURIFICATION UNIT', -255, ENG.std - 22, 11);
+{ const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
+  for (const [a, b, c, d] of [[-13, -13, 13, -13], [13, -13, 13, 13], [13, 13, -13, 13], [-13, 13, -13, -13], [-13, -13, 13, 13], [13, -13, -13, 13]]) symLine(g, a, b, c, d, 3); }
+{ const pts = [P(-345, 430, 2), P(240, 430, 2), P(240, 1665, 2), P(-345, 1665, 2), P(-345, 430, 2)];   // dashed engine-room boundary
+  const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 
 // ---------------------------------------------------------------- state
 const initial = () => ({
   running: false,
-  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false },
+  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false, v125: false, v126: false, v128: false },
   flap: { a: false, b: false, g: false },
-  on: { b1: false, b2: false, bg: false, aiu: false },
-  set: { b1: 1, b2: 1, bg: 1, aiu: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
+  on: { b1: false, b2: false, bg: false, aiu: false, std: false, exb: false },
+  set: { b1: 1, b2: 1, bg: 1, aiu: 1, std: 1, exb: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
   burn: { a: false, b: false },
   pit: { h2: 0, Ta: EST.ambient, Tb: EST.ambient, Tcool: EST.ambient, after: 0, burnt: 0 }
 });
@@ -642,7 +671,7 @@ const stateWord = p => p.type === 'blower' ? (S.on[p.key] ? 'RUNNING' : 'STOPPED
 // running blower; it stops at the first closed one.
 const passes = n => n in S.open ? S.open[n] : n === 'fa' ? S.flap.a : n === 'fb' ? S.flap.b : n === 'fg' ? S.flap.g : n in S.on ? S.on[n] : true;
 function reach() {
-  const got = new Set(S.running ? ['pitOut', 'compt', 'vent'] : []);
+  const got = new Set(S.running ? ['pitOut', 'compt', 'vent', 'std', 'exb', 'aiu'] : []);
   for (const p of pipes) p.reached = false;
   for (let changed = true; changed;) {
     changed = false;
@@ -672,7 +701,7 @@ const warn = msg => notify(msg);
 const NAMES = { v58: '58', v123: '123', v122: '122', v134: '134', v109: '109', v110: '110', v114: '114', v117: '117', vin: '118' };
 function missingFor(k) {
   const o = S.open, f = S.flap, m = [];
-  if (k === 'aiu') return m;
+  if (k === 'aiu' || k === 'std' || k === 'exb') return m;
   if (k === 'bg') { if (!o.v134 && !f.g) m.push('134 or the galley flap'); return m; }
   if (!o.v122) m.push('122'); if (!f.a && !f.b) m.push('a FLAP 103');
   if (k === 'b1' && !o.v109) m.push('109'); if (k === 'b2' && !o.v110) m.push('110'); if (!o.v114 && !o.v117) m.push('114 or 117');
@@ -701,6 +730,7 @@ function tap(id) {
   // Mode 1 last step: with 122 open, tapping an open 114 cracks it (part open) instead of closing it
   if (mode && id === 'v114' && S.open.v114 && S.open.v122 && !crack114) { crack114 = true; p.wheelTarget = (p.openAngle + p.closedAngle) / 2; notify('Valve 114 · CRACKED OPEN', true); return; }
   if (id === 'v114' && crack114) crack114 = false;
+  if (id === 'v126') { const open = !crack126; crack126 = open; S.open.v126 = open; S.on.exb = open; p.wheelTarget = open ? (p.openAngle + p.closedAngle) / 2 : p.closedAngle; notify('Valve 126 · ' + (open ? 'CRACKED OPEN — exhaust blower running' : 'CLOSED'), true); setTimeout(() => checkStep(id, !open), 0); return; }
   const wasOn = isOn(p);
   if (p.type === 'valve' || p.type === 'flap') {
     const store = p.type === 'valve' ? S.open : S.flap;
@@ -743,8 +773,8 @@ function allOff() {
   for (const p of parts.values()) { if (p.wheel) p.wheelTarget = p.closedAngle; if (p.blade) p.bladeTarget = Math.PI / 2; }
 }
 function showRunState() { startBtn.innerHTML = S.running ? '<span>Ⅱ</span> Pause' : '<span>▶</span> Start'; startBtn.setAttribute('aria-pressed', String(S.running)); }
-startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) { allOff(); mode = 0; crack114 = false; } showRunState(); });     // Pause: everything closes and stops, as on screen 1
-resetBtn?.addEventListener('click', () => { S.running = false; mode = 0; crack114 = false; allOff(); Object.assign(S.pit, initial().pit); showRunState(); notify('Circuit reset — all valves closed, H₂ cleared.', true); });
+startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) { allOff(); mode = 0; crack114 = crack126 = false; } showRunState(); });     // Pause: everything closes and stops, as on screen 1
+resetBtn?.addEventListener('click', () => { S.running = false; mode = 0; crack114 = crack126 = false; allOff(); Object.assign(S.pit, initial().pit); showRunState(); notify('Circuit reset — all valves closed, H₂ cleared.', true); });
 showRunState();
 
 
@@ -808,7 +838,7 @@ function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored
 // ---- every valve port number on the drawing
 const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
   ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936]];
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936], ['v125', '125', 232, 545], ['v126', '126', 110, 545], ['v128', '128', 110, 755]];
 for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
@@ -896,7 +926,7 @@ SPOTS.push(...MORE_INFO);
 // ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
 // Mode 1 · closed: 103 open (everything else shut) → one blower: 109 + Blower 1 or 110 + Blower 2 → 114 → 117 → 122 → crack 114.
 // Mode 2 · into compartment: Mode 1, then open 118.   Mode 5 · urgent dive: Mode 1, then open 134 and start the galley blower.
-let mode = 0, crack114 = false, modeWarned = '';
+let mode = 0, crack114 = false, crack126 = false, modeWarned = '';
 const pair = () => (S.open.v109 && S.on.b1) || (S.open.v110 && S.on.b2);
 const MODE1 = [
   ['Open 103 (done when the mode is chosen)', () => S.flap.a || S.flap.b, ['fa', 'fb']],
@@ -907,16 +937,25 @@ const MODE1 = [
   ['Open 122', () => S.open.v122, ['v122']],
   ['Crack 114 open — tap 114 again', () => crack114, ['v114']]
 ];
+const MODE3 = [
+  ['Open 103 (done when the mode is chosen)', () => S.flap.a || S.flap.b, ['fa', 'fb']],
+  ['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket', () => S.open.kl, ['kl']],
+  ['Open 128', () => S.open.v128, ['v128']], ['Open 125', () => S.open.v125, ['v125']],
+  ['Start the Standard Blower 127', () => S.on.std, ['std']], ['Crack 126 open — tap 126', () => crack126, ['v126']]
+];
+const MODE4 = [['Open 118', () => S.open.vin, ['vin']], ['Open 123', () => S.open.v123, ['v123']], ['Open the Klinket', () => S.open.kl, ['kl']], ['Start the Air Induction Unit blower', () => S.on.aiu, ['aiu']]];
 const MODES = {
+  3: { name: 'Supply & exhaust', title: 'Mode 3 · Ventilation of battery by supply and exhaust blower', steps: MODE3, note: 'In the tubes 250 L/min · out 50 L/min' },
+  4: { name: 'Standard blower', title: 'Mode 4 · Ventilation of battery by standard blower', steps: MODE4 },
   1: { name: 'Closed', title: 'Mode 1 · Ventilation of battery in closed', steps: MODE1 },
   2: { name: 'Into compt', title: 'Mode 2 · Ventilation of battery into compartment', steps: [...MODE1, ['Open 118 — air from outside', () => S.open.vin, ['vin']]] },
   5: { name: 'Urgent dive', title: 'Mode 5 · Ventilation of battery during urgent dive', steps: [...MODE1, ['Open 134', () => S.open.v134, ['v134']], ['Start the galley blower', () => S.on.bg, ['bg']]] }
 };
 function progress() { const st = MODES[mode]?.steps || []; let i = 0; while (i < st.length && st[i][1]()) i++; return { st, i }; }
 function chooseMode(m) {
-  mode = m; crack114 = false; modeWarned = ''; allOff(); S.running = true; showRunState();
-  S.flap.a = S.flap.b = true; for (const id of ['fa', 'fb']) parts.get(id).bladeTarget = 0;      // 103 opens, all other ports shut
-  notify(MODES[m].title + ' — 103 opened, all other ports closed', true); drawModes(); drawModeBar();
+  mode = m; crack114 = crack126 = false; modeWarned = ''; allOff(); S.running = true; showRunState();
+  if (m !== 4) { S.flap.a = S.flap.b = true; for (const id of ['fa', 'fb']) parts.get(id).bladeTarget = 0; }      // 103 opens (Modes 1, 2, 3, 5), all other ports shut
+  notify(MODES[m].title + (m === 4 ? ' — all ports closed' : ' — 103 opened, all other ports closed'), true); drawModes(); drawModeBar();
   document.querySelectorAll('.port-no').forEach((el, i) => { if (PORTS[i][0] === 'fa' || PORTS[i][0] === 'fb') { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); } });
 }
 const modesEl = document.createElement('div'); modesEl.className = 'vcard modes'; modesEl.setAttribute('role', 'region'); modesEl.setAttribute('aria-label', 'Ventilation modes');
@@ -931,7 +970,7 @@ function drawModes() {
   else {
     html += '<div class="hint">' + m.title + '</div><div class="cur">' + (i < st.length ? '<b>Step ' + (i + 1) + ' / ' + st.length + '</b> ' + st[i][0] : '') + '</div><div class="dots">' + st.map((_, k) => '<i class="' + (k < i ? 'd' : k === i ? 'n' : '') + '"></i>').join('') + '</div>';
     const bad = wrongProcess();
-    html += bad ? '<div class="msg bad">⚠ ' + bad + '</div>' : i >= st.length ? '<div class="msg ok">✓ ' + m.title.split(' · ')[1] + ' — complete</div>' : '';
+    html += bad ? '<div class="msg bad">⚠ ' + bad + '</div>' : i >= st.length ? '<div class="msg ok">✓ ' + m.title.split(' · ')[1] + ' — complete' + (m.note ? '<br>' + m.note : '') + '</div>' : '';
   }
   if (html !== modesEl._html) { modesEl._html = html; modesEl.innerHTML = html; modesEl.querySelectorAll('[data-m]').forEach(b => b.onclick = () => chooseMode(+b.dataset.m)); }
   // pulse the part(s) to touch next
@@ -960,7 +999,7 @@ function checkStep(id, wasOn) {
   if (bad) warn('⚠ ' + bad);
   else if (!wasOn && !want.includes(id) && !st.slice(0, i).some(s => (typeof s[2] === 'function' ? s[2]() : s[2]).includes(id))) warn('⚠ Wrong step — next: ' + st[i][0]);
 }
-const USES = { 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
+const USES = { 3: ['fa', 'fb', 'vin', 'v123', 'v125', 'v126', 'v128'], 4: ['vin', 'v123'], 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
 const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
 modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
 (document.querySelector('header .top-actions') || circuit).prepend(modeBar);
@@ -970,7 +1009,7 @@ function drawModeBar() {
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
   const use = USES[mode] || null;
   document.querySelectorAll('.port-no').forEach((el, i) => {
-    const [id, n] = PORTS[i], part = id && parts.get(id), on = !!(part && S.running && isOn(part)), cr = id === 'v114' && on && crack114;
+    const [id, n] = PORTS[i], part = id && parts.get(id), on = !!(part && S.running && isOn(part)), cr = on && ((id === 'v114' && crack114) || (id === 'v126' && crack126));
     el.classList.toggle('use', !!use && use.includes(id)); el.classList.toggle('dim', !!use && !use.includes(id));
     el.classList.toggle('is-open', on && !cr); el.classList.toggle('is-crack', cr);
     const html = n + (cr ? '<em>CRACKED</em>' : on ? '<em>OPEN</em>' : '');
@@ -1017,6 +1056,8 @@ function frame(now) {
   }
   const sp = k => S.on[k] ? parts.get(k).speed : 0;                                // a stopped blower moves no air
   flows = ventFlows({ open: S.open, flap: S.flap, speed: { b1: sp('b1'), b2: sp('b2'), bg: sp('bg') } });
+  flows.m3 = S.on.std && S.open.v128 && S.open.v125 ? 250 * sp('std') : 0; flows.ex = S.on.exb && crack126 && S.open.v125 ? 50 * sp('exb') : 0;
+  flows.m3pit = S.open.v123 ? flows.m3 + flows.ex : 0; flows.aiuQ = S.on.aiu && S.open.kl ? 250 * sp('aiu') : 0;
   if (crack114 && S.open.v114 && S.open.v117) { flows.toCompt = flows.qm * .2; flows.recirc = flows.qm - flows.toCompt; }
   stepPit(S.pit, flows, S.running ? dt * SIM_SPEED / 3600 : 0, dt, S.running, S.burn);
   S.pit.Ta = S.pit.Tb = burnerT;            // the burners run at the temperature set in the box

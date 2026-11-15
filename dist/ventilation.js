@@ -316,14 +316,14 @@ function symText(text, x, y, size = 15) {
 // centre and turning right into the handle bar. The triangles are black like the drawing before Start, then carry the
 // state colour (red shut, green open) with a black outline.
 const GATE_ON = new T.Color('#1f9e7a'), INK_COL = new T.Color('#111518');
-function gateValve(id, x, y, title) {
+function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET']) {
   const g = new T.Group(); g.position.copy(P(x, y, SYM_Y)); scene.add(g);
   const GLASS = new T.Color('#8fb3c6'), fillMat = new T.MeshBasicMaterial({ color: GLASS.clone(), transparent: true, opacity: .42, depthWrite: false }), state = { color: LAMP_IDLE.clone() };   // clear glass like the pipes
   const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
   for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
   for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
   symLine(g, 0, 0, 0, -36, 4); symLine(g, 0, -36, 32, -36, 4); symLine(g, 32, -36, 32, -62, 4);   // handle as drawn: stem up, right, then up
-  symText('EXHAUST', x + 8, y - 108, 15); symText('KLINKET', x + 8, y - 86, 15);
+  words.forEach((w, i) => symText(w, x + 8, y - 86 - (words.length - 1 - i) * 22, 15));
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }
 function flap(id, key, x, y, title) {
@@ -593,13 +593,43 @@ arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet'
 arrow(680, 750, 'l', 'room', 'qgRoom', 1); arrow(365, 345, 'l', 'room', 'draught', 1);
 arrow(360, 1345, 'l', 'dirty', 'out', 2, 40); arrow(1600, 1285, 'l', 'room', 'pitIn', 2, 40);
 
+// ---- below the battery pit (client sketch + drawing): Air Induction Unit → cooler 806 4C → duct along the bottom.
+// M/R valve at the left end, through the engine room (E/R) to the Klinket, under the pit with three outlets up into
+// the pit (↑), and the E/R valve at the right end. Air in this line comes with Modes 3 / 4.
+const DUCT_Y = 1600;
+for (const n of ['J5', 'D1', 'D2', 'D3']) JUNCTIONS.add(n);
+Object.assign(FACE, { vmr: 24, ver: 24, kl: 27, aclr: 50 });
+pipe('vmr', 'J5', 'aiuQ', [[-270, DUCT_Y], [-60, DUCT_Y]], 'room');
+pipe('aclr', 'J5', 'aiuQ', [[-60, 1460], [-60, DUCT_Y]], 'room');
+pipe('J5', 'kl', 'aiuQ', [[-60, DUCT_Y], [380, DUCT_Y]], 'room');
+pipe('kl', 'D1', 'aiuQ', [[380, DUCT_Y], [620, DUCT_Y]], 'room');
+pipe('D1', 'D2', 'aiuQ', [[620, DUCT_Y], [1000, DUCT_Y]], 'room');
+pipe('D2', 'D3', 'aiuQ', [[1000, DUCT_Y], [1380, DUCT_Y]], 'room');
+pipe('D3', 'ver', 'aiuQ', [[1380, DUCT_Y], [1880, DUCT_Y]], 'room');
+for (const [i, x] of [[1, 620], [2, 1000], [3, 1380]]) {
+  pipe('D' + i, 'pitUp' + i, 'aiuQ', [[x, DUCT_Y], [x, 1548]], 'room');
+  const g = new T.Group(); g.position.copy(P(x, 1528, SYM_Y)); scene.add(g);            // ↑ outlet into the pit, as drawn
+  symLine(g, 0, 18, 0, -14, 4); symLine(g, 0, -16, -9, -4, 4); symLine(g, 0, -16, 9, -4, 4);
+}
+valve('vmr', -270, DUCT_Y, false, 'M/R valve', 'bottom');
+valve('ver', 1880, DUCT_Y, false, 'E/R valve', 'bottom');
+gateValve('kl', 380, DUCT_Y, 'Klinket', ['KLINKET']);
+diamond(-60, 1460, 'cool');
+blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', ([fx, fy, fh], [ax, ay, ah]) => {
+  pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');
+  arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
+});
+symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
+symText('ENGINE ROOM', -150, 1215, 16); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
+symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
+
 // ---------------------------------------------------------------- state
 const initial = () => ({
   running: false,
-  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false },
+  open: { v58: false, v123: false, v122: false, v134: false, v109: false, v110: false, v114: false, v117: false, vin: false, vmr: false, ver: false, kl: false },
   flap: { a: false, b: false, g: false },
-  on: { b1: false, b2: false, bg: false },
-  set: { b1: 1, b2: 1, bg: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
+  on: { b1: false, b2: false, bg: false, aiu: false },
+  set: { b1: 1, b2: 1, bg: 1, aiu: 1 },                          // speed set point 0.2..1 (blower viewer Speed)
   burn: { a: false, b: false },
   pit: { h2: 0, Ta: EST.ambient, Tb: EST.ambient, Tcool: EST.ambient, after: 0, burnt: 0 }
 });
@@ -642,6 +672,7 @@ const warn = msg => notify(msg);
 const NAMES = { v58: '58', v123: '123', v122: '122', v134: '134', v109: '109', v110: '110', v114: '114', v117: '117', vin: '118' };
 function missingFor(k) {
   const o = S.open, f = S.flap, m = [];
+  if (k === 'aiu') return m;
   if (k === 'bg') { if (!o.v134 && !f.g) m.push('134 or the galley flap'); return m; }
   if (!o.v122) m.push('122'); if (!f.a && !f.b) m.push('a FLAP 103');
   if (k === 'b1' && !o.v109) m.push('109'); if (k === 'b2' && !o.v110) m.push('110'); if (!o.v114 && !o.v117) m.push('114 or 117');
@@ -751,9 +782,10 @@ showRunState();
 .tap-tip b{display:block;letter-spacing:.06em}.tap-tip span{display:block;font-weight:400;font-size:.82em;opacity:.95}
 .tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
 @keyframes tipBob{50%{translate:0 -.35em}}
-.mode-bar{position:absolute;left:14px;top:50%;transform:translate(-10px,-50%);display:flex;flex-direction:column;gap:10px;z-index:15;opacity:0;pointer-events:none;transition:opacity .35s,transform .35s;font-family:Arial,sans-serif}
-.mode-bar.show{opacity:1;transform:translate(0,-50%);pointer-events:auto}
-.mode-bar button{width:clamp(96px,8.6vw,200px);min-height:clamp(52px,4.6vw,96px);text-align:left;padding:6px 14px;border-radius:12px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
+.mode-bar{display:none;gap:8px;font-family:Arial,sans-serif;margin-right:6px}
+body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:translateY(-50%)!important}
+.mode-bar.show{display:flex;animation:fadeIn .35s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.mode-bar button{font-size:clamp(12px,.85vw,22px)!important;min-width:clamp(78px,5.6vw,170px);min-height:clamp(46px,3vw,80px);text-align:center;padding:4px 10px;border-radius:10px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
 .mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}
 .mode-bar button:active{transform:scale(.96)}.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 0 0 4px #1d4f6e33,0 4px 14px #12405e33}
 .mode-bar button.soon{border-style:dashed;opacity:.55}
@@ -931,10 +963,10 @@ function checkStep(id, wasOn) {
 const USES = { 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
 const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
 modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
-circuit.append(modeBar);
+(document.querySelector('header .top-actions') || circuit).prepend(modeBar);
 modeBar.querySelectorAll('button').forEach(b => b.onclick = () => { const k = +b.dataset.m; if (!MODES[k]) { notify('Mode ' + k + ' will be added with the engine-room section.', true); return; } chooseMode(k); });
 function drawModeBar() {
-  modeBar.classList.toggle('show', S.running);
+  modeBar.classList.toggle('show', S.running); document.body.classList.toggle('modes-on', S.running);
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
   const use = USES[mode] || null;
   document.querySelectorAll('.port-no').forEach((el, i) => {
@@ -955,7 +987,7 @@ function layout() {
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
   if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
   renderer.setSize(w, h);
-  const PW = 1940, PH = 1340, cx = 990 - 1000, cz = 895 - 786, aspect = w / h;
+  const PW = 2320, PH = 1500, cx = 805 - 1000, cz = 962 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
   Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);

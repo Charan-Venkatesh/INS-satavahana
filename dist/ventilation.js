@@ -321,13 +321,14 @@ function flap(id, key, x, y, title) {
   blade.rotation.y = Math.PI / 2;
   return addPart(id, 'flap', x, y, title, 60, { key, lamp: lamp(g, 26, -10), blade, bladeTarget: Math.PI / 2 });
 }
-// The blower picture's camera (Blower Viewer: camera (1.6, 1.0, 1.15) looking at (−0.15, 0.38, −0.05), Y up) is turned onto
+// Client angle (Nov 2026): side view — perforated inlet face on the left, red outlet flange on top, motor to the right
+// (viewer orbit th = −π/2 + 0.2, ph = 1.36). Earlier: the blower picture's camera (1.6, 1.0, 1.15) was turned onto
 // this screen's top camera, so from above each blower looks exactly like the picture: volute face with the inlet eye in
 // front, motor behind on the left, red outlet flange on top. The eye sits on its suction pipe; the outlet feeds the
 // discharge pipe, which leaves upward as in the drawing.
 const PICTURE = (() => {
   const basis = (z, up) => { const x = new T.Vector3().crossVectors(up, z).normalize(), y = new T.Vector3().crossVectors(z, x); return new T.Matrix4().makeBasis(x, y, z); };
-  const from = basis(new T.Vector3(1.75, .62, 1.2).normalize(), new T.Vector3(0, 1, 0)), to = new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
+  const from = basis(new T.Vector3(0.1943, 0.2092, -0.9584).normalize(), new T.Vector3(0, 1, 0)), to = new T.Matrix4().makeBasis(new T.Vector3(1, 0, 0), new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
   return new T.Quaternion().setFromRotationMatrix(to.multiply(from.transpose()));
 })();
 function blower(id, x, y, width, title, connect) {
@@ -505,16 +506,16 @@ function inletDuct(pts) {
   const path = roundedPath(pts.slice(1)); glassTube(new T.TubeGeometry(path, 48, 12, 16, false));
   const [x, y] = pts[pts.length - 1]; flange(P(x, y, PIPE_Y + 3), new T.Vector3(0, 1, 0), 12);
 }
-blower('b1', 1300, 420, 118, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v109', 'b1', 'q1', suction(1140, 420, 1300, h), 'clean'); inletDuct(suction(1140, 420, 1300, h));
+blower('b1', 1300, 420, 140, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v109', 'b1', 'q1', [[1140, 420], [1300, 420]], 'clean'); flange(P(1298, 420, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b1', 'J3', 'q1', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // as drawn: out of the top, straight right, down to the common line
 });
-blower('b2', 1300, 555, 118, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v110', 'b2', 'q2', suction(1150, 555, 1300, h), 'clean'); inletDuct(suction(1150, 555, 1300, h));
+blower('b2', 1300, 555, 140, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v110', 'b2', 'q2', [[1150, 555], [1300, 555]], 'clean'); flange(P(1298, 555, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b2', 'J3', 'q2', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // out of the top, straight right, up to the common line
 });
-blower('bg', 650, 880, 100, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v134', 'bg', 'qgPit', [[520, 990], [520, 880], ...suction(560, 880, 650, h)], 'dirty'); inletDuct(suction(560, 880, 650, h));
+blower('bg', 650, 880, 122, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v134', 'bg', 'qgPit', [[520, 990], [520, 880], [650, 880]], 'dirty'); flange(P(648, 880, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('fg', 'bg', 'qgRoom', [[560, 825], [560, 880]], 'room');
   junction('GJ', P(560, 880, PIPE_Y), 13);                                        // tee where the galley flap line joins the suction
   pipe('bg', 'galley', 'qg', [[fx, fy, fh], [ax, ay, ah], [780, ay, ah]], 'dirty');   // straight right to the galley

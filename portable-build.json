@@ -11,7 +11,7 @@
     "assets/circuit-reference.jpg",
     "assets/icon-192.png"
   ],
-  "service_worker_cache": "battery-3d-36c6445ac9240422",
+  "service_worker_cache": "battery-3d-f439110cf9b80770",
   "cached_assets": 29,
   "no_external_runtime_dependencies": true
 }

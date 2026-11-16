@@ -1099,7 +1099,24 @@ function setExt(on) {
   document.querySelectorAll('.port-no').forEach((el, i) => { const id = PORTS[i][0]; if (parts.get(id)?.tag === 'ext') el.style.display = on ? '' : 'none'; });
   layout();
 }
+// Client: on this screen the modes are chosen from a selector in the header (the floating mode card is not shown).
+const modeSel = document.createElement('label'); modeSel.className = 'mode-select';
+modeSel.innerHTML = '<span>MODE</span><select aria-label="Ventilation mode"><option value="">Select mode…</option>' + [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<option value="' + k + '">Mode ' + k + ' · ' + n + '</option>').join('') + '</select>';
+document.querySelector('header .top-actions')?.prepend(modeSel);
+const modeSelect = modeSel.querySelector('select');
+modeSelect.addEventListener('change', () => { if (modeSelect.value) chooseMode(+modeSelect.value); });
+{ const st = document.createElement('style'); st.textContent = `
+.mode-bar{display:none!important}
+.mode-select{display:flex;align-items:center;gap:10px;margin-right:6px;font:700 13px Arial,sans-serif;letter-spacing:.14em;color:#4a7088}
+.mode-select select{-webkit-appearance:none;appearance:none;min-height:52px;min-width:clamp(210px,14vw,320px);padding:0 44px 0 16px;border-radius:12px;border:2px solid #1d4f6e;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231d4f6e' stroke-width='2.4' fill='none'/%3E%3C/svg%3E") no-repeat right 16px center;color:#1d4f6e;font:700 clamp(14px,.95vw,22px) Arial,sans-serif;letter-spacing:0;cursor:pointer;box-shadow:0 4px 14px #12405e1f;transition:border-color .2s,box-shadow .2s}
+.mode-select select:hover{box-shadow:0 0 0 4px #1d4f6e22,0 4px 14px #12405e1f}
+.mode-select select:focus-visible{outline:3px solid #1f7fbf;outline-offset:2px}
+.mode-select.on select{background-color:#1d4f6e;color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23ffffff' stroke-width='2.4' fill='none'/%3E%3C/svg%3E")}
+.mode-select option{color:#173f57;background:#fff}
+@media(max-width:1500px){header .header-title{left:clamp(300px,24vw,430px)!important;transform:translateY(-50%)!important;font-size:clamp(15px,1.6vw,26px)!important}.mode-select span{display:none}.mode-select select{min-width:190px}}
+@media(max-width:1199px){header .header-title{display:none!important}}`; document.head.append(st); }
 function drawModeBar() {
+  if (modeSelect.value !== String(mode || '')) modeSelect.value = mode ? String(mode) : ''; modeSel.classList.toggle('on', !!mode);
   if ((mode === 3 || mode === 4) !== extOn) setExt(mode === 3 || mode === 4);
   modeBar.classList.toggle('show', S.running); 
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));

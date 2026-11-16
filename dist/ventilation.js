@@ -371,7 +371,7 @@ function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET'], box = false)
   for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : INKC); fillMat.opacity = S.running ? .75 : .95; }; }
   for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
   symLine(g, 0, 0, 0, -40, 4); symLine(g, -16, -40, 34, -40, 4); symLine(g, 34, -40, 34, -66, 4);   // handle as drawn: stem up, arm out BOTH sides of the stem (short end left), then up at the right end
-  symLine(g, -15, -21, 15, -21, 4);                                                   // crossbar at the foot of the stem (the ⊥ on the drawing)
+  // client: crossbar on the stem removed
   words.forEach((w, i) => symText(w, x + 8, y - 86 - (words.length - 1 - i) * 22, 15));
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }

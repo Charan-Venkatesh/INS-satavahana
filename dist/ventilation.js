@@ -57,14 +57,47 @@ const mat = {
   red: new T.MeshStandardMaterial({ color: '#c8322b', metalness: .3, roughness: .4 }),
   glass: new T.MeshPhysicalMaterial({ color: '#8fb3c6', metalness: 0, roughness: .06, transparent: true, opacity: .34, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: 1.6 }),   // writes depth: overlapping pipes show one glass surface, so joints blend
   flange: new T.MeshStandardMaterial({ color: '#9aa6ad', metalness: .8, roughness: .35 }),
-  pit: new T.MeshStandardMaterial({ color: '#cfdbe0', metalness: .1, roughness: .9 })
+  pit: new T.MeshBasicMaterial({ color: '#1d5f8a', transparent: true, opacity: .08, depthWrite: false })   // light see-through tint, as on screen 1
 };
 
 // ---------------------------------------------------------------- backdrop and battery pit
-{ const f = new T.Mesh(new T.PlaneGeometry(2800, 2000), new T.MeshBasicMaterial({ map: floorTex })); f.rotation.x = -Math.PI / 2; f.position.y = -700; scene.add(f); }
+// Interactive backdrop (as on screen 1): soft sea-blue light drifting over a faint engineering grid, a ripple where the
+// screen is touched and a light that follows the pointer. It tints blue while the circuit runs, green when the chosen
+// mode is complete, and pulses red on an H₂ alarm or a wrong-process warning. Drawn first, filling the camera frame.
+const RIPPLES = 8;
+const backdrop = (() => {
+  const u = { uTime: { value: 0 }, uCenter: { value: new T.Vector2() }, uHalf: { value: new T.Vector2(1, 1) }, uFlow: { value: 0 }, uOk: { value: 0 }, uVent: { value: 0 },
+    uMouse: { value: new T.Vector3() }, uRip: { value: Array.from({ length: RIPPLES }, () => new T.Vector4(0, 0, -99, 0)) } };
+  const m = new T.Mesh(new T.PlaneGeometry(1, 1), new T.ShaderMaterial({ uniforms: u, depthWrite: false, depthTest: false, toneMapped: false,
+    vertexShader: 'varying vec2 vP;void main(){vec4 w=modelMatrix*vec4(position,1.);vP=w.xz;gl_Position=projectionMatrix*viewMatrix*w;}',
+    fragmentShader: `varying vec2 vP;uniform float uTime,uFlow,uOk,uVent;uniform vec2 uCenter,uHalf;uniform vec3 uMouse;uniform vec4 uRip[${RIPPLES}];
+float gl(vec2 p,float s){vec2 g=abs(fract(p/s-.5)-.5)/fwidth(p/s);return 1.-min(min(g.x,g.y),1.);}
+void main(){vec2 q=(vP-uCenter)/uHalf;float t=uTime,r=length(q*vec2(.85,1.));
+ vec3 col=mix(vec3(.995,1.,1.),vec3(.76,.86,.93),smoothstep(.05,1.35,r));
+ vec2 a=vec2(.55*sin(t*.071),.35*cos(t*.053)),b=vec2(-.6*cos(t*.047),.4*sin(t*.061+1.3));
+ col+=vec3(.05,.07,.08)*exp(-dot(q-a,q-a)*2.2)+vec3(.02,.05,.08)*exp(-dot(q-b,q-b)*2.6);
+ float wave=.55+.45*sin(t*.9-r*5.);
+ col=mix(col,vec3(.70,.85,.98),.28*uFlow*wave);col=mix(col,vec3(.80,.96,.86),.24*uOk*(.6+.4*sin(t*2.)));col=mix(col,vec3(1.,.80,.78),.36*uVent*(.55+.45*sin(t*3.6)));
+ float lit=0.,md=length(vP-uMouse.xy);lit+=uMouse.z*exp(-md*md/(260.*260.));col+=vec3(.06,.10,.13)*uMouse.z*exp(-md*md/(420.*420.));
+ for(int i=0;i<${RIPPLES};i++){vec4 R=uRip[i];float age=t-R.z;if(age<0.||age>2.4)continue;float d=length(vP-R.xy),rad=age*520.,f=1.-age/2.4;
+  float ring=exp(-pow((d-rad)/34.,2.))*f*f;col=mix(col,vec3(.38,.72,.97),ring*.45*R.w);lit+=ring*1.6+exp(-d*d/(rad*rad+1.))*f*.4;}
+ col=mix(col,vec3(.11,.37,.56),(gl(vP,24.)*.035+gl(vP,120.)*.075)*(1.+2.5*lit));col*=1.-.10*smoothstep(.7,1.5,r);gl_FragColor=vec4(col,1.);}` }));
+  m.rotation.x = -Math.PI / 2; m.position.y = -700; m.renderOrder = -10; m.frustumCulled = false; scene.add(m);
+  let next = 0, hover = 0;
+  const toWorld = e => { const r = host.getBoundingClientRect(); return new T.Vector3((e.clientX - r.left) / r.width * 2 - 1, -((e.clientY - r.top) / r.height * 2 - 1), 0).unproject(camera); };
+  circuit.addEventListener('pointerdown', e => { const v = toWorld(e); u.uRip.value[next].set(v.x, v.z, u.uTime.value, 1); next = (next + 1) % RIPPLES; }, { capture: true, passive: true });
+  circuit.addEventListener('pointermove', e => { const v = toWorld(e); u.uMouse.value.x = v.x; u.uMouse.value.y = v.z; hover = e.pointerType === 'mouse' ? 1 : 0; }, { passive: true });
+  circuit.addEventListener('pointerleave', () => { hover = 0; }, { passive: true });
+  return {
+    fit() { const w = camera.right - camera.left, h = camera.top - camera.bottom, cx = (camera.left + camera.right) / 2, cz = -(camera.top + camera.bottom) / 2;
+      m.scale.set(w * 1.02, h * 1.02, 1); m.position.x = cx; m.position.z = cz; u.uCenter.value.set(cx, cz); u.uHalf.value.set(w / 2, h / 2); },
+    update(dt, run, ok, alarm) { const k = Math.min(1, dt * 2.5), ease = (o, t) => o.value += (t - o.value) * k; u.uTime.value += dt;
+      ease(u.uFlow, run ? 1 : 0); ease(u.uOk, ok ? 1 : 0); ease(u.uVent, alarm ? 1 : 0); u.uMouse.value.z += (hover - u.uMouse.value.z) * k; }
+  };
+})();
 {
   const pit = new T.Mesh(new T.PlaneGeometry(1780, 370), mat.pit); pit.rotation.x = -Math.PI / 2; pit.position.copy(P(1000, 1340, -20)); scene.add(pit);
-  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(1780, 370)), new T.LineBasicMaterial({ color: '#9fb0b8' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(P(1000, 1340, -19)); scene.add(edge);
+  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(1780, 370)), new T.LineBasicMaterial({ color: '#2d4f66' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(P(1000, 1340, -19)); scene.add(edge);
   const dash = new T.Line(new T.BufferGeometry().setFromPoints([P(90, 1150, -18), P(1890, 1150, -18)]), new T.LineDashedMaterial({ color: '#7d94a0', dashSize: 16, gapSize: 12 })); dash.computeLineDistances(); scene.add(dash);
 }
 const batteries = [];
@@ -856,6 +889,21 @@ body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:tra
 .vinfo-card>div{width:min(460px,92vw);background:#fff;border-radius:16px;padding:20px 22px;font:15px/1.5 Arial,sans-serif;color:#173f57;box-shadow:0 20px 60px #0008}
 .vinfo-card h2{margin:0 0 6px;font-size:20px}.vinfo-card p{margin:6px 0;color:#3f5f72}.vinfo-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0}.vinfo-card dt{color:#5a7586}.vinfo-card dd{margin:0;font-weight:700;text-align:right}
 .vinfo-card button{margin-top:8px;width:100%;height:46px;border-radius:10px;border:0;background:#1d4f6e;color:#fff;font:700 15px Arial}
+@keyframes fadeUp{from{opacity:0;translate:0 .8em}to{opacity:1;translate:0 0}}
+@keyframes pop{0%{scale:1}35%{scale:1.16}100%{scale:1}}
+@keyframes okGlow{0%,100%{box-shadow:0 0 0 .2em #22b45a30,0 .5em 1.6em #12405e26}50%{box-shadow:0 0 0 .5em #22b45a22,0 0 1.6em #22b45a55}}
+@keyframes badPulse{0%,100%{box-shadow:0 0 0 .2em #e2574c33}50%{box-shadow:0 0 0 .55em #e2574c22,0 0 1.6em #e2574c55}}
+@keyframes stepIn{from{opacity:0;translate:-.8em 0}to{opacity:1;translate:0 0}}
+@keyframes startPulse{0%,100%{box-shadow:0 0 0 0 #245b4a66}50%{box-shadow:0 0 0 10px #245b4a00}}
+.vcard{animation:fadeUp .7s cubic-bezier(.2,.8,.2,1) both}.btemp{animation-delay:.15s}.modes{animation-delay:.3s}
+.btemp .tv span{display:inline-block}.btemp .tv span.pop{animation:pop .3s ease-out}
+.modes li.now{animation:stepIn .45s cubic-bezier(.2,.8,.2,1)}
+.modes:has(.msg.ok){animation:okGlow 2.2s ease-in-out infinite}.modes:has(.msg.bad){animation:badPulse 1.2s ease-in-out infinite}
+.port-no{animation:fadeUp .6s cubic-bezier(.2,.8,.2,1) both}
+.mode-bar button:hover{background:#eef5fa}.mode-bar button.on:hover{background:#1d4f6e}
+.btemp button,.vinfo span{transition:transform .12s,background .2s}.btemp button:active,.vinfo:active span{transform:scale(.92)}
+#start[aria-pressed="false"]{animation:startPulse 2.2s ease-out infinite}
+@media(prefers-reduced-motion:reduce){.vcard,.port-no,.modes li.now,.modes,#start{animation:none!important}}
 @media(max-width:700px){.modes,.btemp{display:none}}`;
   document.head.append(st);
 }
@@ -876,7 +924,7 @@ const BURN_CSS = t => t < 40 ? '#2f7fd0' : t <= 70 ? '#e07b14' : '#d8322b';
   const el = document.createElement('div'); el.className = 'vcard btemp'; el.setAttribute('role', 'group'); el.setAttribute('aria-label', 'Burner temperature');
   el.innerHTML = '<h3>BURNER TEMPERATURE</h3><div class="tv"><span>30</span><small>°C</small></div><div class="row"><button type="button" aria-label="Lower temperature">−</button><input type="range" min="0" max="150" step="1" value="30" aria-label="Burner temperature, °C"><button type="button" aria-label="Raise temperature">+</button></div><div class="scale"><i style="background:#2f7fd0"></i><i style="background:#f08a24"></i><i style="background:#d8322b"></i></div><div class="lg"><span>&lt;40 blue</span><span>40–70 orange</span><span>&gt;70 red</span></div>';
   const [minus, plus] = el.querySelectorAll('button'), slider = el.querySelector('input'), tv = el.querySelector('.tv');
-  const set = v => { burnerT = Math.max(0, Math.min(150, Math.round(v))); slider.value = burnerT; tv.firstChild.textContent = burnerT; tv.style.color = BURN_CSS(burnerT); };
+  const num = tv.querySelector('span'); const set = v => { const before = burnerT; burnerT = Math.max(0, Math.min(150, Math.round(v))); slider.value = burnerT; num.textContent = burnerT; tv.style.color = BURN_CSS(burnerT); if (before !== burnerT) { num.classList.remove('pop'); void num.offsetWidth; num.classList.add('pop'); } };
   slider.addEventListener('input', () => set(+slider.value)); minus.onclick = () => set(burnerT - 5); plus.onclick = () => set(burnerT + 5);
   pin(el, 905, 700); set(30);
 }
@@ -1055,7 +1103,6 @@ function drawModeBar() {
   });
 }
 setInterval(() => { drawModes(); drawModeBar(); }, 250); drawModes(); drawModeBar();
-setExt(false);                                            // start in the normal view
 
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();
@@ -1067,7 +1114,7 @@ function layout() {
   renderer.setSize(w, h);
   const [PW, PH, cx, cz] = extOn ? [2340, 1600, 795 - 1000, 925 - 786] : [1940, 1340, 990 - 1000, 895 - 786], aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
-  Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
+  Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix(); backdrop.fit();
   pxPerUnit = h / (2 * hh);
   for (const p of parts.values()) {
     const [sx, sy] = screenPoint(p.x, p.y), s = Math.max(44, p.size * pxPerUnit);
@@ -1077,6 +1124,7 @@ function layout() {
   for (const a of anchored) { const [sx, sy] = screenPoint(a.x, a.y, 80); Object.assign(a.el.style, { left: sx + 'px', top: sy + 'px' }); }
   circuit.style.setProperty('--k', String(pxPerUnit));
 }
+setExt(false);                                            // start in the normal view (needs the layout helpers above)
 new ResizeObserver(layout).observe(host);
 window.visualViewport?.addEventListener('resize', layout);
 layout();
@@ -1139,6 +1187,7 @@ function frame(now) {
   if (S.running && h2 >= ALARM) { alarmEl.style.display = 'block'; alarmEl.className = h2 >= DANGER ? 'red' : ''; alarmEl.textContent = h2 >= DANGER ? '⚠ H₂ DANGER ' + h2.toFixed(1) + ' % — explosive limit reached, ventilate now' : '⚠ H₂ HIGH ' + h2.toFixed(1) + ' % — start the battery pit ventilation'; }
   else alarmEl.style.display = 'none';
 
+  { const pr = progress(); backdrop.update(dt, S.running, !!mode && pr.i >= pr.st.length && !wrongProcess(), (S.running && S.pit.h2 >= ALARM) || !!wrongProcess()); }
   renderer.render(scene, camera);
   requestAnimationFrame(frame);
 }

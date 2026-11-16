@@ -873,14 +873,6 @@ showRunState();
 .tap-tip b{display:block;letter-spacing:.06em}.tap-tip span{display:block;font-weight:400;font-size:.82em;opacity:.95}
 .tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
 @keyframes tipBob{50%{translate:0 -.35em}}
-.mode-bar{display:none;gap:8px;font-family:Arial,sans-serif;margin-right:6px}
-@media(min-width:1500px){body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:translateY(-50%)!important}}
-@media(max-width:1499px){.mode-bar{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:25;background:#ffffffe6;padding:6px;border-radius:12px;box-shadow:0 4px 16px #12405e26}}
-.mode-bar.show{display:flex;animation:fadeIn .35s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
-.mode-bar button{font-size:clamp(12px,.85vw,22px)!important;min-width:clamp(78px,5.6vw,170px);min-height:clamp(46px,3vw,80px);text-align:center;padding:4px 10px;border-radius:10px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
-.mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}
-.mode-bar button:active{transform:scale(.96)}.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 0 0 4px #1d4f6e33,0 4px 14px #12405e33}
-.mode-bar button.soon{border-style:dashed;opacity:.55}
 .port-no{transition:background .3s,opacity .3s,transform .3s}
 .port-no em{font-style:normal;font-size:.62em;margin-left:.35em;letter-spacing:.06em;vertical-align:.12em}
 .port-no.is-open{background:#1e9e5a!important;opacity:1!important}.port-no.is-crack{background:#d98a14!important;opacity:1!important}
@@ -891,6 +883,21 @@ showRunState();
 .vinfo-card>div{width:min(460px,92vw);background:#fff;border-radius:16px;padding:20px 22px;font:15px/1.5 Arial,sans-serif;color:#173f57;box-shadow:0 20px 60px #0008}
 .vinfo-card h2{margin:0 0 6px;font-size:20px}.vinfo-card p{margin:6px 0;color:#3f5f72}.vinfo-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0}.vinfo-card dt{color:#5a7586}.vinfo-card dd{margin:0;font-weight:700;text-align:right}
 .vinfo-card button{margin-top:8px;width:100%;height:46px;border-radius:10px;border:0;background:#1d4f6e;color:#fff;font:700 15px Arial}
+#circuit{--mbar:0px}#circuit.modes-on{--mbar:clamp(66px,5.4vw,118px)}
+#circuit #viewport,#circuit #labels{top:var(--mbar);transition:top .35s cubic-bezier(.2,.8,.2,1)}
+#circuit.modes-on #vent-warning{top:calc(var(--mbar) + 12px)}
+.mode-bar{position:absolute;top:0;left:0;right:0;height:var(--mbar);display:flex;align-items:center;justify-content:center;gap:clamp(10px,1.2vw,26px);background:linear-gradient(180deg,#f9fbfdf2,#eef4f8f2);border-bottom:1px solid #cfdde7;box-shadow:0 2px 12px #12405e14;z-index:15;font-family:Arial,sans-serif;opacity:0;pointer-events:none;transform:translateY(-100%);transition:opacity .3s,transform .35s cubic-bezier(.2,.8,.2,1)}
+.mode-bar.show{opacity:1;pointer-events:auto;transform:none}
+.mode-bar .ml{font:700 clamp(11px,.72vw,19px)/1.2 Arial;letter-spacing:.16em;color:#4a7088;text-align:right}
+.mode-bar .seg{display:flex;gap:clamp(3px,.3vw,8px);padding:clamp(4px,.3vw,8px);background:#fff;border:1px solid #c9d8e2;border-radius:clamp(12px,.9vw,22px);box-shadow:0 3px 14px #12405e1c}
+.mode-bar button{display:flex;align-items:center;gap:clamp(6px,.5vw,12px);height:calc(var(--mbar) - clamp(22px,1.6vw,36px));padding:0 clamp(10px,1vw,24px);border:0;border-radius:clamp(9px,.7vw,16px);background:transparent;color:#1d4f6e;cursor:pointer;text-align:left;transition:background .2s,color .2s,transform .12s}
+.mode-bar button b{flex:0 0 auto;display:grid;place-items:center;width:clamp(24px,1.7vw,40px);height:clamp(24px,1.7vw,40px);border-radius:50%;background:#e3edf4;color:#1d4f6e;font:700 clamp(12px,.85vw,20px)/1 Arial;transition:background .2s,color .2s}
+.mode-bar button span{display:flex;flex-direction:column;font:700 clamp(13px,.9vw,22px)/1.15 Arial;white-space:nowrap}
+.mode-bar button small{font:400 clamp(11px,.72vw,17px)/1.2 Arial;color:#5a7586;margin-top:2px}
+.mode-bar button:hover{background:#eef5fa}.mode-bar button:active{transform:scale(.97)}
+.mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 4px 14px #1d4f6e44}.mode-bar button.on b{background:#fff;color:#1d4f6e}.mode-bar button.on small{color:#cfe3f0}
+.mode-bar button.soon{opacity:.5}
+@media(max-width:900px){.mode-bar .ml{display:none}.mode-bar button small{display:none}}
 @keyframes fadeUp{from{opacity:0;translate:0 .8em}to{opacity:1;translate:0 0}}
 @keyframes pop{0%{scale:1}35%{scale:1.16}100%{scale:1}}
 @keyframes okGlow{0%,100%{box-shadow:0 0 0 .2em #22b45a30,0 .5em 1.6em #12405e26}50%{box-shadow:0 0 0 .5em #22b45a22,0 0 1.6em #22b45a55}}
@@ -902,7 +909,6 @@ showRunState();
 .modes li.now{animation:stepIn .45s cubic-bezier(.2,.8,.2,1)}
 .modes:has(.msg.ok){animation:okGlow 2.2s ease-in-out infinite}.modes:has(.msg.bad){animation:badPulse 1.2s ease-in-out infinite}
 .port-no{animation:fadeUp .6s cubic-bezier(.2,.8,.2,1) both}
-.mode-bar button:hover{background:#eef5fa}.mode-bar button.on:hover{background:#1d4f6e}
 .btemp button,.vinfo span{transition:transform .12s,background .2s}.btemp button:active,.vinfo:active span{transform:scale(.92)}
 #start[aria-pressed="false"]{animation:startPulse 2.2s ease-out infinite}
 @media(prefers-reduced-motion:reduce){.vcard,.port-no,.modes li.now,.modes,#start{animation:none!important}}
@@ -1081,8 +1087,8 @@ function checkStep(id, wasOn) {
 }
 const USES = { 3: ['fa', 'fb', 'vin', 'v123', 'v58', 'v125', 'v126', 'v128'], 4: ['vin', 'v123'], 1: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122'], 2: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'vin'], 5: ['fa', 'fb', 'v109', 'v110', 'v114', 'v117', 'v122', 'v134'] };
 const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; modeBar.setAttribute('role', 'toolbar'); modeBar.setAttribute('aria-label', 'Ventilation mode');
-modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
-(document.querySelector('header .top-actions') || circuit).prepend(modeBar);
+modeBar.innerHTML = '<div class="ml">VENTILATION<br>MODE</div><div class="seg">' + [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '><b>' + k + '</b><span>Mode ' + k + '<small>' + n + '</small></span></button>').join('') + '</div>';
+circuit.append(modeBar);
 modeBar.querySelectorAll('button').forEach(b => b.onclick = () => { const k = +b.dataset.m; if (!MODES[k]) { notify('Mode ' + k + ' will be added with the engine-room section.', true); return; } chooseMode(k); });
 function setExt(on) {
   extOn = on; extGroup.visible = on; baseGroup.visible = !on;
@@ -1093,7 +1099,7 @@ function setExt(on) {
 }
 function drawModeBar() {
   if ((mode === 3 || mode === 4) !== extOn) setExt(mode === 3 || mode === 4);
-  modeBar.classList.toggle('show', S.running); document.body.classList.toggle('modes-on', S.running);
+  modeBar.classList.toggle('show', S.running); circuit.classList.toggle('modes-on', S.running);
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
   const use = USES[mode] || null;
   document.querySelectorAll('.port-no').forEach((el, i) => {

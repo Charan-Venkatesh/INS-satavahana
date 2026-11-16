@@ -364,6 +364,7 @@ function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET']) {
   for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
   for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
   symLine(g, 0, 0, 0, -36, 4); symLine(g, 0, -36, 32, -36, 4); symLine(g, 32, -36, 32, -62, 4);   // handle as drawn: stem up, right, then up
+  symLine(g, -15, -21, 15, -21, 4);                                                   // crossbar at the foot of the stem (the ⊥ on the drawing)
   words.forEach((w, i) => symText(w, x + 8, y - 86 - (words.length - 1 - i) * 22, 15));
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
 }
@@ -922,9 +923,9 @@ function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored
 
 // ---- every valve port number on the drawing
 const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 708],
-  ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 505, 778], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -160, LOW + 100], ['v128', '128', 88, 530], ['v129', '129', 172, 735]];
-for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
+  ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 440, 1055], ['v123', '123', 222, 1000],
+  ['v134', '134', 575, 1045], ['fg', 'Galley flap', 605, 785], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -160, LOW + 100], ['v128', '128', 88, 530], ['v129', '129', 120, 640]];
+for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y).port = id; }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
 let burnerT = 30;
@@ -1008,7 +1009,7 @@ const MORE_INFO = [
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 SPOTS.push(...MORE_INFO);
 const EXT_SPOTS = new Set(['exb', 'std', 'aiu']);
-SPOTS.push(...[['exb', -50, 305, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', 40, 772, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
+SPOTS.push(...[['exb', -50, 305, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', -60, 808, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
   ['aiu', -160, 1282, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
 
 // ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
@@ -1108,6 +1109,7 @@ modeSelect.addEventListener('change', () => { if (modeSelect.value) chooseMode(+
 { const st = document.createElement('style'); st.textContent = `
 .mode-bar{display:none!important}
 .vcard.modes{display:none!important}
+.tap-tip{display:none!important}
 .mode-select{display:flex;align-items:center;gap:10px;margin-right:6px;font:700 13px Arial,sans-serif;letter-spacing:.14em;color:#4a7088}
 .mode-select select{-webkit-appearance:none;appearance:none;min-height:52px;min-width:clamp(210px,14vw,320px);padding:0 44px 0 16px;border-radius:12px;border:2px solid #1d4f6e;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231d4f6e' stroke-width='2.4' fill='none'/%3E%3C/svg%3E") no-repeat right 16px center;color:#1d4f6e;font:700 clamp(14px,.95vw,22px) Arial,sans-serif;letter-spacing:0;cursor:pointer;box-shadow:0 4px 14px #12405e1f;transition:border-color .2s,box-shadow .2s}
 .mode-select select:hover{box-shadow:0 0 0 4px #1d4f6e22,0 4px 14px #12405e1f}
@@ -1133,9 +1135,9 @@ header #reset:hover{background:#ffffff26!important}
 .mode-select.on select{background-color:#fff;color:#0f2a3d;border-color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231d4f6e' stroke-width='2.4' fill='none'/%3E%3C/svg%3E")}
 .port-no{background:#ffffffec!important;color:#123a52!important;border:1px solid #cfdde7!important;border-left:.28em solid #1f7fbf!important;border-radius:.45em;box-shadow:0 .2em .6em #12405e22;padding:.16em .4em .16em .34em}
 .port-no.dim{opacity:.55!important}
-.port-no.is-open{border-left-color:#16a34a!important;color:#0f6b36!important;opacity:1!important}
-.port-no.is-crack{border-left-color:#d98a14!important;color:#9a5a06!important;opacity:1!important}
-.port-no.use{border-left-color:#1f7fbf!important;color:#0f4566!important;box-shadow:0 0 0 .18em #1f7fbf55,0 .2em .6em #12405e22}`; document.head.append(st); }
+.port-no.is-open{background:#ffffffec!important;border-left-color:#16a34a!important;color:#0f6b36!important;opacity:1!important}
+.port-no.is-crack{background:#ffffffec!important;border-left-color:#d98a14!important;color:#9a5a06!important;opacity:1!important}
+.port-no.use{background:#ffffffec!important;scale:1.06;border-left-color:#1f7fbf!important;color:#0f4566!important;box-shadow:0 0 0 .18em #1f7fbf55,0 .2em .6em #12405e22}`; document.head.append(st); }
 function drawModeBar() {
   if (modeSelect.value !== String(mode || '')) modeSelect.value = mode ? String(mode) : ''; modeSel.classList.toggle('on', !!mode);
   if ((mode === 3 || mode === 4) !== extOn) setExt(mode === 3 || mode === 4);
@@ -1170,6 +1172,18 @@ function layout() {
   }
   for (const o of SPOTS) { const [sx, sy] = screenPoint(o.x, o.y, 80); Object.assign(o.button.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const a of anchored) { const [sx, sy] = screenPoint(a.x, a.y, 80); Object.assign(a.el.style, { left: sx + 'px', top: sy + 'px' }); }
+  // port tags: sit a fixed gap outside their valve, on the side drawn, and grow AWAY from it (adding "OPEN" never covers the valve)
+  for (const a of anchored) {
+    const p = a.port && parts.get(a.port); if (!p) continue;
+    const dx = a.x - p.x, dy = a.y - p.y, r = p.size / 2 + 16, horiz = Math.abs(dx) >= Math.abs(dy);
+    const corner = Math.min(Math.abs(dx), Math.abs(dy)) > .6 * Math.max(Math.abs(dx), Math.abs(dy)), sgx = Math.sign(dx || 1), sgy = Math.sign(dy || 1);
+    if (corner) {                                          // diagonal: tag's near corner tucked off the valve's corner, clear of both pipe runs
+      const [sx, sy] = screenPoint(p.x + sgx * (p.size * .35 + 10), p.y + sgy * (p.size / 2 + 10), 80);
+      Object.assign(a.el.style, { left: sx + 'px', top: sy + 'px', transform: 'translate(' + (sgx > 0 ? '0' : '-100%') + ',' + (sgy > 0 ? '0' : '-100%') + ')' }); continue;
+    }
+    const [sx, sy] = horiz ? screenPoint(p.x + sgx * r, p.y, 80) : screenPoint(p.x, p.y + sgy * r, 80);
+    Object.assign(a.el.style, { left: sx + 'px', top: sy + 'px', transform: horiz ? (dx >= 0 ? 'translate(0,-50%)' : 'translate(-100%,-50%)') : (dy >= 0 ? 'translate(-50%,0)' : 'translate(-50%,-100%)') });
+  }
   circuit.style.setProperty('--k', String(pxPerUnit));
 }
 setExt(false);                                            // start in the normal view (needs the layout helpers above)

@@ -26,6 +26,12 @@ renderer.setPixelRatio(sharpRatio()); renderer.outputColorSpace = T.SRGBColorSpa
 renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 host.append(renderer.domElement);
 const scene = new T.Scene(); scene.background = new T.Color('#e9eef0');
+// Extension shown only in Modes 3 and 4 (engine room + duct under the pit): everything created while TAG = 'ext' goes
+// into extGroup; TAG = 'base' marks what only the normal view shows (58's own overboard outlet).
+let TAG = null, extOn = false;
+const extGroup = new T.Group(), baseGroup = new T.Group(); scene.add(extGroup, baseGroup); extGroup.visible = false;
+{ const add = scene.add.bind(scene); scene.add = (...o) => TAG === 'ext' ? extGroup.add(...o) : TAG === 'base' ? baseGroup.add(...o) : add(...o); }
+const tagged = (t, fn) => (...a) => { const prev = TAG; TAG = t; try { return fn(...a); } finally { TAG = prev; } };
 const camera = new T.OrthographicCamera(-1000, 1000, 600, -600, 1, 8000);
 camera.position.set(0, 3000, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
 {
@@ -102,19 +108,21 @@ const BLOWERS = new Set(['b1', 'b2', 'bg']);
 const steel = new T.MeshStandardMaterial({ color: '#c4cbd0', metalness: .95, roughness: .28 }), boltMat = new T.MeshStandardMaterial({ color: '#4a5156', metalness: .9, roughness: .35 });
 const UP = new T.Vector3(0, 1, 0);
 // every flange ring and bolt is one instance of two shared meshes (two draw calls in all), rebuilt when flanges are added
-const FLANGE_RING = new T.CylinderGeometry(1.5, 1.5, .34, 32), FLANGE_BOLT = new T.CylinderGeometry(.13, .13, .62, 10), flangeRings = [], flangeBolts = [];
+const FLANGE_RING = new T.CylinderGeometry(1.5, 1.5, .34, 32), FLANGE_BOLT = new T.CylinderGeometry(.13, .13, .62, 10), FL = { null: [[], []], ext: [[], []], base: [[], []] };
 let flangeMeshes = null;
 function flange(at, dir, r) {
   const q = new T.Quaternion().setFromUnitVectors(UP, dir.clone().normalize()), s = new T.Vector3(r, r, r);
+  const [flangeRings, flangeBolts] = FL[TAG];
   flangeRings.push(new T.Matrix4().compose(at, q, s));
   for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; flangeBolts.push(new T.Matrix4().compose(at.clone().add(new T.Vector3(Math.cos(a) * r * 1.26, 0, Math.sin(a) * r * 1.26).applyQuaternion(q)), q, s)); }
   flangeMeshes = null;
 }
 function buildFlanges() {
-  for (const [geo, matl, list, i] of [[FLANGE_RING, steel, flangeRings, 0], [FLANGE_BOLT, boltMat, flangeBolts, 1]]) {
-    const old = buildFlanges.meshes?.[i]; if (old) { scene.remove(old); old.dispose(); }
-    const m = new T.InstancedMesh(geo, matl, list.length); list.forEach((x, k) => m.setMatrixAt(k, x)); m.frustumCulled = false; scene.add(m);
-    (buildFlanges.meshes ||= [])[i] = m;
+  let i = 0;
+  for (const [key, host] of [[null, scene], ['ext', extGroup], ['base', baseGroup]]) for (const [geo, matl, list] of [[FLANGE_RING, steel, FL[key][0]], [FLANGE_BOLT, boltMat, FL[key][1]]]) {
+    const old = buildFlanges.meshes?.[i]; if (old) { old.parent?.remove(old); old.dispose(); }
+    const m = new T.InstancedMesh(geo, matl, list.length); list.forEach((x, k) => m.setMatrixAt(k, x)); m.frustumCulled = false; host === scene ? Object.getPrototypeOf(scene).add.call(scene, m) : host.add(m);
+    (buildFlanges.meshes ||= [])[i++] = m;
   }
   flangeMeshes = buildFlanges.meshes;
 }
@@ -277,7 +285,7 @@ function lamp(group, r, y = 2) {
   const glow = sprite(glowTex, LAMP_IDLE.clone(), r * 3, .35); glow.position.y = y - 1; group.add(glow);
   return { ring, glow, color: LAMP_IDLE.clone() };
 }
-function addPart(id, type, x, y, title, size, extra) { const p = { id, type, x, y, title, size, ...extra }; parts.set(id, p); return p; }
+function addPart(id, type, x, y, title, size, extra) { const p = { id, type, x, y, title, size, tag: TAG, ...extra }; parts.set(id, p); return p; }
 
 function valve(id, x, y, vertical, title, side = 'top') {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
@@ -592,6 +600,7 @@ arrow(1720, 450, 'r', 'clean', 'toCompt'); arrow(1765, 790, 'l', 'room', 'inlet'
 arrow(680, 750, 'l', 'room', 'qgRoom', 1); arrow(365, 345, 'l', 'room', 'draught', 1);
 arrow(360, 1345, 'l', 'dirty', 'out', 2, 40); arrow(1600, 1285, 'l', 'room', 'pitIn', 2, 40);
 
+TAG = 'ext';
 // ---- below the battery pit (client sketch + drawing): Air Induction Unit → cooler 806 4C → duct along the bottom.
 // M/R valve at the left end, through the engine room (E/R) to the Klinket, under the pit with three outlets up into
 // the pit (↑), and the E/R valve at the right end. Air in this line comes with Modes 3 / 4.
@@ -614,14 +623,15 @@ valve('vmr', -270, DUCT_Y, false, 'M/R valve', 'bottom');
 valve('ver', 1880, DUCT_Y, false, 'E/R valve', 'bottom');
 gateValve('kl', 380, DUCT_Y, 'Klinket', ['KLINKET']);
 diamond(-60, 1460, 'cool');
-blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', ([fx, fy, fh], [ax, ay, ah]) => {
+blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', tagged('ext', ([fx, fy, fh], [ax, ay, ah]) => {
   pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');
   arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
-});
+}));
 symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
 symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
-symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
+TAG = null; symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
 
+TAG = 'ext';
 // ---- engine room (original drawing): the exhaust line carries on LEFT from Klinket 58.
 // 58 → K1 (128 drops to the standard blower) → valve → Exhaust Blower → valve → X → up and out overboard (⇐).
 // X → 125 → lower line: 124 (left end) · 126 (cracked) · Standard Blower 127 blowing left; 127 draws from the right,
@@ -651,12 +661,12 @@ valve('v128', 40, 530, true, 'Valve 128', 'right');
 valve('v125', -260, 430, true, 'Valve 125', 'left');
 valve('v124', -320, LOW, false, 'Valve 124', 'top');
 valve('v126', -160, LOW + 55, true, 'Valve 126', 'right');
-blower('exb', -110, TOP, 105, 'Exhaust Blower', ([fx, fy, fh], [ax, ay, ah]) => {
+blower('exb', -110, TOP, 105, 'Exhaust Blower', tagged('ext', ([fx, fy, fh], [ax, ay, ah]) => {
   pipe('exb', 'vexB', 'exq', [[fx, fy, fh], [fx, OUT_Y, ah], [-205, OUT_Y]], 'dirty');
-}, true);
-blower('std', -60, SUC, 105, 'Standard Blower 127', ([fx, fy, fh], [ax, ay, ah]) => {
+}), true);
+blower('std', -60, SUC, 105, 'Standard Blower 127', tagged('ext', ([fx, fy, fh], [ax, ay, ah]) => {
   pipe('std', 'T6', 'm3', [[fx, fy, fh], [fx, LOW, ah], [-160, LOW]], 'dirty');
-}, true);
+}), true);;
 plume(-322, 185, -1, 0, 'm3'); arrow(-345, 185, 'l', 'dirty', 'm3', 1); arrow(235, SUC, 'l', 'room', 'co2', 1);
 { const g = new T.Group(); g.position.copy(P(-260, 215, SYM_Y)); scene.add(g); symLine(g, 0, 12, 0, -14, 3.5); symLine(g, 0, -16, -8, -5, 3.5); symLine(g, 0, -16, 8, -5, 3.5); }   // ↑ on the outlet
 symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -60, SUC + 72, 13);
@@ -665,6 +675,9 @@ symText('FROM CARBON DIOXIDE', 170, SUC + 40, 11); symText('AIR PURIFICATION UNI
   const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 { const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
   for (const [a, b, c, d] of [[-13, -13, 13, -13], [13, -13, 13, 13], [13, 13, -13, 13], [-13, 13, -13, -13], [-13, -13, 13, 13], [13, -13, -13, 13]]) symLine(g, a, b, c, d, 3); }
+TAG = 'base';                                            // normal view: 58 vents straight overboard, as before
+pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty'); plume(60, 360, -1, 0, 'draught'); arrow(30, 360, 'l', 'dirty', 'draught', 1);
+TAG = null;
 
 // ---------------------------------------------------------------- state
 const initial = () => ({
@@ -936,6 +949,7 @@ const MORE_INFO = [
   ['flt', 440, 720, () => infoCard('Filter', 'Filter on the suction line after valve 122. It cleans the pit air before the H₂ burners.', () => [['Valve 122', S.open.v122 ? 'OPEN' : 'CLOSED'], ['Air through it', Math.round(flows.qm) + ' m³/h']])]
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 SPOTS.push(...MORE_INFO);
+const EXT_SPOTS = new Set(['exb', 'std', 'aiu']);
 SPOTS.push(...[['exb', -55, 412, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', -5, 752, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
   ['aiu', -175, 1382, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
 
@@ -1020,7 +1034,15 @@ const modeBar = document.createElement('div'); modeBar.className = 'mode-bar'; m
 modeBar.innerHTML = [[1, 'Closed'], [2, 'Into compartment'], [3, 'Supply & exhaust'], [4, 'Standard blower'], [5, 'Urgent dive']].map(([k, n]) => '<button type="button" data-m="' + k + '"' + (MODES[k] ? '' : ' class="soon"') + '>Mode ' + k + '<small>' + (MODES[k] ? n : n + ' · soon') + '</small></button>').join('');
 (document.querySelector('header .top-actions') || circuit).prepend(modeBar);
 modeBar.querySelectorAll('button').forEach(b => b.onclick = () => { const k = +b.dataset.m; if (!MODES[k]) { notify('Mode ' + k + ' will be added with the engine-room section.', true); return; } chooseMode(k); });
+function setExt(on) {
+  extOn = on; extGroup.visible = on; baseGroup.visible = !on;
+  for (const p of parts.values()) if (p.tag === 'ext' && p.button) p.button.style.display = on ? '' : 'none';
+  for (const o of SPOTS) if (EXT_SPOTS.has(o.id)) o.button.style.display = on ? '' : 'none';
+  document.querySelectorAll('.port-no').forEach((el, i) => { const id = PORTS[i][0]; if (parts.get(id)?.tag === 'ext') el.style.display = on ? '' : 'none'; });
+  layout();
+}
 function drawModeBar() {
+  if ((mode === 3 || mode === 4) !== extOn) setExt(mode === 3 || mode === 4);
   modeBar.classList.toggle('show', S.running); document.body.classList.toggle('modes-on', S.running);
   modeBar.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.m === mode));
   const use = USES[mode] || null;
@@ -1033,6 +1055,7 @@ function drawModeBar() {
   });
 }
 setInterval(() => { drawModes(); drawModeBar(); }, 250); drawModes(); drawModeBar();
+setExt(false);                                            // start in the normal view
 
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();
@@ -1042,7 +1065,7 @@ function layout() {
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
   if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
   renderer.setSize(w, h);
-  const PW = 2340, PH = 1600, cx = 795 - 1000, cz = 925 - 786, aspect = w / h;
+  const [PW, PH, cx, cz] = extOn ? [2340, 1600, 795 - 1000, 925 - 786] : [1940, 1340, 990 - 1000, 895 - 786], aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
   Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);

@@ -357,13 +357,20 @@ function symText(text, x, y, size = 15) {
 // centre and turning right into the handle bar. The triangles are black like the drawing before Start, then carry the
 // state colour (red shut, green open) with a black outline.
 const GATE_ON = new T.Color('#1f9e7a'), INK_COL = new T.Color('#111518');
-function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET']) {
+function gateValve(id, x, y, title, words = ['EXHAUST', 'KLINKET'], box = false) {
   const g = new T.Group(); g.position.copy(P(x, y, SYM_Y)); scene.add(g);
   const GLASS = new T.Color('#8fb3c6'), fillMat = new T.MeshBasicMaterial({ color: GLASS.clone(), transparent: true, opacity: .42, depthWrite: false }), state = { color: LAMP_IDLE.clone() };   // clear glass like the pipes
-  const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]];
-  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; }; }
+  if (box) {                                                   // engine-room drawing symbol: flange | box with a slash | flange
+    const f = symFill(g, [[-17, -13], [17, -13], [17, 13], [-17, 13]], fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : GLASS); fillMat.opacity = S.running ? .5 : .42; };
+    symLine(g, -17, -13, 17, -13, 2.6); symLine(g, 17, -13, 17, 13, 2.6); symLine(g, 17, 13, -17, 13, 2.6); symLine(g, -17, 13, -17, -13, 2.6);
+    symLine(g, -11, 11, 11, -11, 3);                                                  // the slash
+    symLine(g, -25, -20, -25, 20, 4); symLine(g, 25, -20, 25, 20, 4);                 // flange bars
+    return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
+  }
+  const tri = [[[-26, -17], [-26, 17], [0, 0]], [[26, -17], [26, 17], [0, 0]]], INKC = new T.Color('#161b1f');   // solid black triangles, as on the drawing
+  for (const t of tri) { const f = symFill(g, t, fillMat); f.onBeforeRender = () => { fillMat.color.copy(S.running ? state.color : INKC); fillMat.opacity = S.running ? .75 : .95; }; }
   for (const t of tri) for (let i = 0; i < 3; i++) symLine(g, ...t[i], ...t[(i + 1) % 3], 2.6);
-  symLine(g, 0, 0, 0, -36, 4); symLine(g, 0, -36, 32, -36, 4); symLine(g, 32, -36, 32, -62, 4);   // handle as drawn: stem up, right, then up
+  symLine(g, 0, 0, 0, -40, 4); symLine(g, -16, -40, 34, -40, 4); symLine(g, 34, -40, 34, -66, 4);   // handle as drawn: stem up, arm out BOTH sides of the stem (short end left), then up at the right end
   symLine(g, -15, -21, 15, -21, 4);                                                   // crossbar at the foot of the stem (the ⊥ on the drawing)
   words.forEach((w, i) => symText(w, x + 8, y - 86 - (words.length - 1 - i) * 22, 15));
   return addPart(id, 'valve', x, y, title, 64, { key: id, lamp: { ring: { material: state }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON } });
@@ -688,9 +695,9 @@ pipe('T6', 'v126', 'ex', [[-160, LOW], [-160, LOW + 55]], 'dirty');             
 pipe('LJ', 'v124', 'none', [[-260, LOW], [-320, LOW]], 'dirty');
 pipe('LJ', 'v125', 'm3', [[-260, LOW], [-260, 430]], 'dirty');
 pipe('v125', 'XJ', 'm3', [[-260, 430], [-260, OUT_Y]], 'dirty');
-gateValve('vexA', -20, TOP, 'Exhaust blower inlet valve', []);
-gateValve('vexB', -205, OUT_Y, 'Exhaust blower outlet valve', []);
-gateValve('v129', 120, SUC, 'Valve 129 (CO₂ unit)', []);
+gateValve('vexA', -20, TOP, 'Exhaust blower inlet valve', [], true);
+gateValve('vexB', -205, OUT_Y, 'Exhaust blower outlet valve', [], true);
+gateValve('v129', 120, SUC, 'Valve 129 (CO₂ unit)', [], true);
 valve('v128', 40, 530, true, 'Valve 128', 'right');
 valve('v125', -260, 430, true, 'Valve 125', 'left');
 valve('v124', -320, LOW, false, 'Valve 124', 'top');

@@ -660,7 +660,7 @@ blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', tagged('ext', ([fx, 
   pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');
   arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
 }));
-symText('M/R', -270, DUCT_Y + 52, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
+symText('M/R', -328, DUCT_Y - 40, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
 symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
 TAG = null; symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
 
@@ -703,7 +703,7 @@ blower('std', -60, SUC, 105, 'Standard Blower 127', tagged('ext', ([fx, fy, fh],
 plume(-322, 185, -1, 0, 'm3'); arrow(-345, 185, 'l', 'dirty', 'm3', 1); arrow(235, SUC, 'l', 'room', 'co2', 1);
 { const g = new T.Group(); g.position.copy(P(-260, 215, SYM_Y)); scene.add(g); symLine(g, 0, 12, 0, -14, 3.5); symLine(g, 0, -16, -8, -5, 3.5); symLine(g, 0, -16, 8, -5, 3.5); }   // ↑ on the outlet
 symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -60, SUC + 72, 13);
-symText('FROM CARBON DIOXIDE', 170, SUC + 40, 11); symText('AIR PURIFICATION UNIT', 170, SUC + 58, 11);
+symText('FROM CARBON DIOXIDE', 128, SUC + 48, 11); symText('AIR PURIFICATION UNIT', 128, SUC + 66, 11);
 { const pts = [P(-370, 150, 2), P(205, 150, 2), P(205, 1665, 2), P(-370, 1665, 2), P(-370, 150, 2)];   // dashed engine-room boundary
   const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 { const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
@@ -872,6 +872,7 @@ showRunState();
 .tap-tip{position:absolute;transform:translate(-50%,-100%);pointer-events:none;z-index:6;font:700 clamp(10px,calc(var(--k,1)*15px),28px)/1.25 Arial,sans-serif;background:#1f7fbf;color:#fff;padding:.45em .75em;border-radius:.7em;box-shadow:0 .4em 1.2em #0b2a3d55;max-width:16em;text-align:center;animation:tipBob 1.2s ease-in-out infinite}
 .tap-tip b{display:block;letter-spacing:.06em}.tap-tip span{display:block;font-weight:400;font-size:.82em;opacity:.95}
 .tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
+.tap-tip.below{transform:translate(-50%,0)}.tap-tip.below::after{bottom:auto;top:-.5em;border-top:0;border-bottom:.55em solid #1f7fbf}
 @keyframes tipBob{50%{translate:0 -.35em}}
 .port-no{transition:background .3s,opacity .3s,transform .3s}
 .port-no em{font-style:normal;font-size:.62em;margin-left:.35em;letter-spacing:.06em;vertical-align:.12em}
@@ -883,21 +884,20 @@ showRunState();
 .vinfo-card>div{width:min(460px,92vw);background:#fff;border-radius:16px;padding:20px 22px;font:15px/1.5 Arial,sans-serif;color:#173f57;box-shadow:0 20px 60px #0008}
 .vinfo-card h2{margin:0 0 6px;font-size:20px}.vinfo-card p{margin:6px 0;color:#3f5f72}.vinfo-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0}.vinfo-card dt{color:#5a7586}.vinfo-card dd{margin:0;font-weight:700;text-align:right}
 .vinfo-card button{margin-top:8px;width:100%;height:46px;border-radius:10px;border:0;background:#1d4f6e;color:#fff;font:700 15px Arial}
-#circuit{--mbar:0px}#circuit.modes-on{--mbar:clamp(66px,5.4vw,118px)}
-#circuit #viewport,#circuit #labels{top:var(--mbar);transition:top .35s cubic-bezier(.2,.8,.2,1)}
-#circuit.modes-on #vent-warning{top:calc(var(--mbar) + 12px)}
-.mode-bar{position:absolute;top:0;left:0;right:0;height:var(--mbar);display:flex;align-items:center;justify-content:center;gap:clamp(10px,1.2vw,26px);background:linear-gradient(180deg,#f9fbfdf2,#eef4f8f2);border-bottom:1px solid #cfdde7;box-shadow:0 2px 12px #12405e14;z-index:15;font-family:Arial,sans-serif;opacity:0;pointer-events:none;transform:translateY(-100%);transition:opacity .3s,transform .35s cubic-bezier(.2,.8,.2,1)}
+#circuit{--mside:0px}#circuit.modes-on{--mside:clamp(150px,11.5vw,280px)}
+#circuit #viewport,#circuit #labels{left:var(--mside);transition:left .35s cubic-bezier(.2,.8,.2,1)}
+.mode-bar{position:absolute;top:0;bottom:0;left:0;width:var(--mside);display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:clamp(10px,1vw,22px);padding:0 clamp(10px,.8vw,18px);box-sizing:border-box;background:linear-gradient(90deg,#f9fbfdf5,#eef4f8f5);border-right:1px solid #cfdde7;box-shadow:2px 0 12px #12405e14;z-index:15;font-family:Arial,sans-serif;opacity:0;pointer-events:none;transform:translateX(-100%);transition:opacity .3s,transform .35s cubic-bezier(.2,.8,.2,1)}
 .mode-bar.show{opacity:1;pointer-events:auto;transform:none}
-.mode-bar .ml{font:700 clamp(11px,.72vw,19px)/1.2 Arial;letter-spacing:.16em;color:#4a7088;text-align:right}
-.mode-bar .seg{display:flex;gap:clamp(3px,.3vw,8px);padding:clamp(4px,.3vw,8px);background:#fff;border:1px solid #c9d8e2;border-radius:clamp(12px,.9vw,22px);box-shadow:0 3px 14px #12405e1c}
-.mode-bar button{display:flex;align-items:center;gap:clamp(6px,.5vw,12px);height:calc(var(--mbar) - clamp(22px,1.6vw,36px));padding:0 clamp(10px,1vw,24px);border:0;border-radius:clamp(9px,.7vw,16px);background:transparent;color:#1d4f6e;cursor:pointer;text-align:left;transition:background .2s,color .2s,transform .12s}
+.mode-bar .ml{font:700 clamp(11px,.72vw,19px)/1.3 Arial;letter-spacing:.16em;color:#4a7088;text-align:center}
+.mode-bar .seg{display:flex;flex-direction:column;gap:clamp(3px,.3vw,8px);padding:clamp(4px,.3vw,8px);background:#fff;border:1px solid #c9d8e2;border-radius:clamp(12px,.9vw,22px);box-shadow:0 3px 14px #12405e1c}
+.mode-bar button{display:flex;align-items:center;gap:clamp(6px,.5vw,12px);min-height:clamp(52px,4vw,96px);padding:0 clamp(8px,.7vw,18px);border:0;border-radius:clamp(9px,.7vw,16px);background:transparent;color:#1d4f6e;cursor:pointer;text-align:left;transition:background .2s,color .2s,transform .12s}
 .mode-bar button b{flex:0 0 auto;display:grid;place-items:center;width:clamp(24px,1.7vw,40px);height:clamp(24px,1.7vw,40px);border-radius:50%;background:#e3edf4;color:#1d4f6e;font:700 clamp(12px,.85vw,20px)/1 Arial;transition:background .2s,color .2s}
 .mode-bar button span{display:flex;flex-direction:column;font:700 clamp(13px,.9vw,22px)/1.15 Arial;white-space:nowrap}
 .mode-bar button small{font:400 clamp(11px,.72vw,17px)/1.2 Arial;color:#5a7586;margin-top:2px}
 .mode-bar button:hover{background:#eef5fa}.mode-bar button:active{transform:scale(.97)}
 .mode-bar button.on{background:#1d4f6e;color:#fff;box-shadow:0 4px 14px #1d4f6e44}.mode-bar button.on b{background:#fff;color:#1d4f6e}.mode-bar button.on small{color:#cfe3f0}
 .mode-bar button.soon{opacity:.5}
-@media(max-width:900px){.mode-bar .ml{display:none}.mode-bar button small{display:none}}
+@media(max-width:900px){.mode-bar button small{display:none}}
 @keyframes fadeUp{from{opacity:0;translate:0 .8em}to{opacity:1;translate:0 0}}
 @keyframes pop{0%{scale:1}35%{scale:1.16}100%{scale:1}}
 @keyframes okGlow{0%,100%{box-shadow:0 0 0 .2em #22b45a30,0 .5em 1.6em #12405e26}50%{box-shadow:0 0 0 .5em #22b45a22,0 0 1.6em #22b45a55}}
@@ -921,7 +921,7 @@ function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored
 // ---- every valve port number on the drawing
 const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
   ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 610, 825], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -110, LOW + 55], ['v128', '128', 88, 530], ['v129', '129', 120, 745]];
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 482, 825], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -212, LOW + 55], ['v128', '128', 88, 530], ['v129', '129', 120, 652]];
 for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
@@ -1006,8 +1006,8 @@ const MORE_INFO = [
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 SPOTS.push(...MORE_INFO);
 const EXT_SPOTS = new Set(['exb', 'std', 'aiu']);
-SPOTS.push(...[['exb', -55, 412, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', -5, 752, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
-  ['aiu', -175, 1382, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
+SPOTS.push(...[['exb', -50, 305, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', 12, 652, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
+  ['aiu', -160, 1282, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
 
 // ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
 // Mode 1 · closed: 103 open (everything else shut) → one blower: 109 + Blower 1 or 110 + Blower 2 → 114 → 117 → 122 → crack 114.
@@ -1064,7 +1064,7 @@ function drawModes() {
   for (const p of parts.values()) p.button.classList.toggle('next', nextIds.includes(p.id));
   const text = m && i < st.length ? st[i][0].replace(/ \(done.*\)/, '') : '';
   nextIds.forEach((id, k) => { let c = tapTips[k]; if (!c) { c = tapTips[k] = document.createElement('div'); c.className = 'tap-tip'; labelsRoot.append(c); c._a = pin(c, 0, 0); }
-    const part = parts.get(id); c._a.x = part.x; c._a.y = part.y - part.size * .55 - 30; const h = '<b>👆 TAP HERE</b><span>' + text + '</span>'; if (c.innerHTML !== h) c.innerHTML = h; c.style.display = ''; });
+    const part = parts.get(id), below = k > 0; c.classList.toggle('below', below); c._a.x = part.x; c._a.y = below ? part.y + part.size * .55 + 48 : part.y - part.size * .55 - 30; const h = '<b>👆 TAP HERE</b><span>' + text + '</span>'; if (c.innerHTML !== h) c.innerHTML = h; c.style.display = ''; });
   for (let k = nextIds.length; k < tapTips.length; k++) tapTips[k].style.display = 'none';
   for (const c of tapTips) if (c.style.display !== 'none') { const [sx, sy] = screenPoint(c._a.x, c._a.y, 80); c.style.left = sx + 'px'; c.style.top = sy + 'px'; }
 }

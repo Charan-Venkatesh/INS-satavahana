@@ -116,7 +116,7 @@ label('MP Air 45 kg/cm²',1050,110,'left');label('PORT',280,130,'center','','mut
 for(const [side,x] of [['port',350],['stbd',1420]]){
  const P=side==='port',B=P?'Port':'STBD',out=P?-1:1,inner=P?1:-1,pgX=P?165:1605,cellX=P?650:1120;
  let g=part(side+'-shutoff','shutoff',side,x,300,'Shut-off valve · '+B,92);cyl(g,55,17,mat.metal,0,4);cyl(g,48,7,mat.white,0,17);const wheel=new T.Group();wheel.position.y=24;g.add(wheel);line(wheel,[[-43,0,0],[43,0,0]]);line(wheel,[[0,0,-43],[0,0,43]]);g.userData.shutoffWheel=wheel;wheel.rotation.y=Math.PI/4;
- label('Shut-off valve',x,198,'center');
+ label('Shut-off valve',x+out*78,300,P?'right':'left');
  pipe([[x,353],[x,401]],side);g=part(side+'-auto','auto',side,x,460,'Automatic reducer · '+B,92);squareSymbol(g,'V');label('Auto Reducer',x+inner*90,455,P?'left':'right','0.45 kg/cm²');
  pipe([[x,517],[x,584]],side);g=part(side+'-hand','hand',side,x,642,'Hand reducer · '+B,96);squareSymbol(g,'X');handWheel(g,side);label('Hand Reducer',x+inner*90,638,P?'left':'right','0.13–0.16 kg/cm²');
  // The whole hand reducer is one tap area: X body, brass bonnet and T-handle (from 48 inboard to 158 outboard).
@@ -124,7 +124,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,80);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
  pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,80);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
- g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x+(P?-60:60),1333,'center','0.2 kg/cm²');
+ g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x,1340,'center','0.2 kg/cm²');
  g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center');
  // "i" beside the 3D battery opens the transparent battery with bubble physics.
  {const info=document.createElement('button');info.className='battery-info';info.textContent='i';info.setAttribute('aria-label','Battery details · '+B);info.onclick=()=>openBattery(side);labelsRoot.append(info);labelNodes.push(infoNodes[side]={el:info,x:cellX+(P?120:-120),z:1310})}
@@ -632,13 +632,19 @@ function visibleBox(root,filter){const box=new T.Box3(),tmp=new T.Box3();root.up
 
 function clientAdditions(){
  {const st=document.createElement('style');st.textContent=`
-#circuit .pit-tag{position:absolute;transform:translate(0,-50%);font:700 clamp(10px,calc(var(--k,1)*24px),44px)/1 Arial,sans-serif;letter-spacing:.18em;color:#24506b;pointer-events:none;white-space:nowrap}
+#circuit .pit-tag{position:absolute;transform:translate(0,-50%);font:700 clamp(10px,calc(var(--k,1)*24px),44px)/1 Arial,sans-serif;letter-spacing:.18em;color:#1f7a70;pointer-events:none;white-space:nowrap;text-shadow:0 0 6px #fff}
 .pit-meter{position:absolute;transform:translate(-50%,-50%);font-size:clamp(4.6px,calc(var(--k,1)*17px),40px);width:12.5em;padding:.7em .8em .8em;border-radius:1em;background:linear-gradient(180deg,#ffffffee,#eef5faee);border:1.5px solid #9dbcd2;box-shadow:0 .5em 1.6em #12405e26;pointer-events:auto;text-align:center;color:#173f57;font-family:Arial,sans-serif;touch-action:manipulation}
 .pit-meter h3{margin:0 0 .3em;font-size:.82em;letter-spacing:.12em;color:#3c6680}
 .pit-meter svg{width:8.2em;height:8.2em;display:block;margin:0 auto -.6em}
 .pit-meter .pv{font:700 1.7em/1 Arial,sans-serif}.pit-meter .pv small{font-size:.48em;font-weight:600;color:#56778c;margin-left:.2em}
 .pit-meter .row{display:flex;align-items:center;gap:.4em;margin-top:.55em}
-.pit-meter input{flex:1;min-width:0;accent-color:#1f7fbf;height:1.8em}
+.pit-meter input{flex:1;min-width:0;height:1.8em;-webkit-appearance:none;appearance:none;background:transparent;cursor:pointer}
+.pit-meter input::-webkit-slider-runnable-track{height:.55em;border-radius:.3em;background:linear-gradient(90deg,#22b45a 0 20%,#e2574c 20% 100%)}
+.pit-meter input::-moz-range-track{height:.55em;border-radius:.3em;background:linear-gradient(90deg,#22b45a 0 20%,#e2574c 20% 100%)}
+.pit-meter input::-webkit-slider-thumb{-webkit-appearance:none;width:1.45em;height:1.45em;margin-top:-.45em;border-radius:50%;background:#fff;border:.18em solid #1d4f6e;box-shadow:0 .15em .5em #12405e55;transition:transform .15s}
+.pit-meter input::-moz-range-thumb{width:1.1em;height:1.1em;border-radius:50%;background:#fff;border:.18em solid #1d4f6e;box-shadow:0 .15em .5em #12405e55}
+.pit-meter input:active::-webkit-slider-thumb{transform:scale(1.15)}
+#circuit .drawing-label span,#circuit .drawing-label small{text-shadow:0 0 3px #fff,0 0 6px #fff,0 0 10px #fff}
 .pit-meter button{width:2.4em;height:2.4em;border-radius:.6em;border:1px solid #a9c4d6;background:#fff;font:700 1.15em/1 Arial;color:#1d4d6b;padding:0}
 .pit-meter .ps{display:none!important;margin-top:.5em;font-size:.78em;line-height:1.3;color:#2c6b4f;font-weight:600;min-height:2.6em;display:flex;align-items:center;justify-content:center}
 .pit-meter.venting{border-color:#e2574c;box-shadow:0 0 0 .25em #e2574c33,0 .5em 1.6em #12405e26}.pit-meter.venting .ps{color:#c0392b}.pit-meter.venting .pv{color:#c0392b}
@@ -695,8 +701,8 @@ function clientAdditions(){
  const all=visibleBox(scene,b=>b.max.x-b.min.x<2600&&b.max.z-b.min.z<2600);
  const pad=55,x0=pit.min.x-pad,x1=pit.max.x+pad,z0=Math.min(pit.min.z-28,PIT_TOP+10),z1=pit.max.z+pad*1.1,yb=all.min.y-2;
  const pitGroup=new T.Group();scene.add(pitGroup);
- const floor=new T.Mesh(new T.PlaneGeometry(x1-x0,z1-z0),new T.MeshBasicMaterial({color:'#1d5f8a',transparent:true,opacity:.07,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set((x0+x1)/2,yb,(z0+z1)/2);pitGroup.add(floor);
- const wall=new T.MeshStandardMaterial({color:'#2d4f66',roughness:.6,metalness:.2}),W=7,H=10;
+ const floor=new T.Mesh(new T.PlaneGeometry(x1-x0,z1-z0),new T.MeshBasicMaterial({color:'#14b8a6',transparent:true,opacity:.09,depthWrite:false}));floor.rotation.x=-Math.PI/2;floor.position.set((x0+x1)/2,yb,(z0+z1)/2);pitGroup.add(floor);
+ const wall=new T.MeshStandardMaterial({color:'#2a9d8f',roughness:.45,metalness:.15,emissive:'#2a9d8f',emissiveIntensity:.15}),W=6,H=10;
  for(const [cx,cz,w,d] of [[(x0+x1)/2,z0,x1-x0+W,W],[(x0+x1)/2,z1,x1-x0+W,W],[x0,(z0+z1)/2,W,z1-z0+W],[x1,(z0+z1)/2,W,z1-z0+W]]){const m=new T.Mesh(new T.BoxGeometry(w,H,d),wall);m.position.set(cx,yb+H/2,cz);m.castShadow=m.receiveShadow=true;pitGroup.add(m)}
  boundary.visible=false;
  const tag=document.createElement('div');tag.className='pit-tag';tag.textContent='BATTERY PIT';anchor(tag,x0+24,z1-30);

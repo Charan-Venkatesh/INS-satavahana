@@ -216,7 +216,7 @@ for(const p of parts.values())p.group.visible=false;network.group.visible=false;
 // coloured by pressure stage; dead-end lines stay pressurised but still. Speeds are shown on a log scale
 // (0.01–10 m/s would otherwise be invisible or a blur); the panel lists the true values.
 let air={port:null,stbd:null,mTotal:0};
-const AIR_SAFFRON='#FF671F';   // client: air flow in Indian Flag Saffron
+const AIR_SAFFRON='#bfe2f6';   // realistic air: pale mist (was saffron #FF671F)
 const STAGE_COLOR={hi:new T.Color(AIR_SAFFRON),mid:new T.Color(AIR_SAFFRON),lo:new T.Color(AIR_SAFFRON),relief:new T.Color(AIR_SAFFRON)};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
@@ -252,7 +252,7 @@ function buildStreamlines(){
  const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=6;   /* after the glass pipes (5) so the saffron is not washed out */scene.add(group);
  for(const sec of pipeSections){
   const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,
-   uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#FF671F')}},
+   uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#bfe2f6')}},
    vertexShader:'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
    fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.55,head*.6),a);}'});
   // polyline length and a perpendicular frame per segment
@@ -266,13 +266,14 @@ function buildStreamlines(){
     u+=L}
    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('aU',new T.Float32BufferAttribute(us,1));g.setAttribute('aSeed',new T.Float32BufferAttribute(seeds,1));
    group.add(new T.Line(g,mat))}
-  // saffron (#FF671F, client) flow band inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
+  // air (pale mist) inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
   const band=new T.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,uniforms:mat.uniforms,
    vertexShader:'varying float vU;varying vec3 vN;uniform float uLen;void main(){vU=uv.x*uLen;vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-   // client reference: a smooth glowing saffron tube - deeper orange-red at the edges, bright #FF671F body, a light line along the centre, thin streaks moving with the flow
-   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;varying vec3 vN;void main(){if(vU/uLen>uReach)discard;float a=min(1.,uAlpha);if(a<.01)discard;float f=clamp(vN.z,0.,1.);vec3 c=mix(vec3(.82,.20,.04),vec3(1.,.404,.122),smoothstep(.05,.65,f));c=mix(c,vec3(1.,.86,.62),smoothstep(.86,.985,f)*.6);float x=fract(vU/85.-uPhase*.35);float s=smoothstep(0.,.05,x)*(1.-smoothstep(.08,.22,x));c=mix(c,vec3(1.,.78,.5),s*.3*f);gl_FragColor=vec4(c,a);}'});
+   // realistic air (client): compressed air is invisible, so it is drawn as a translucent pale-blue mist with white wisps
+   // drifting along the pipe, densest at the centre of the bore and fading towards the glass wall
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;varying vec3 vN;void main(){if(vU/uLen>uReach)discard;float a0=min(1.,uAlpha);if(a0<.01)discard;float f=clamp(vN.z,0.,1.);float t=uPhase;float w=.5+.5*sin(vU/41.-t*2.1+f*2.6)*sin(vU/19.+t*1.3+f*4.);float w2=smoothstep(.62,1.,.5+.5*sin(vU/13.-t*3.4));vec3 c=mix(vec3(.36,.60,.82),vec3(.95,.98,1.),clamp(w*.6+w2*.45,0.,1.));float a=a0*(.88+.08*w+.04*w2);gl_FragColor=vec4(c,a);}'});
   const curve=new T.CurvePath();for(let i=1;i<P.length;i++)if(P[i].distanceTo(P[i-1])>.01)curve.add(new T.LineCurve3(P[i-1],P[i]));
-  if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(8,curve.curves.length*4),sec.rad*.92,12,false),band);tube.renderOrder=6;tube.frustumCulled=false;group.add(tube)}
+  if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(16,Math.ceil(curve.getLength()/4)),sec.rad*.92,12,false),band);tube.renderOrder=6;tube.frustumCulled=false;group.add(tube)}
   sec.branch=branch;sec.mat=mat;
  }
 }
@@ -281,7 +282,7 @@ function streamlineUpdate(dt){const hi=density(45);
   const on=flowing&&(st==='common'||st==='header'||(!!b&&b.open))&&(st!=='safety'||venting(sec.branch));
   const vel=!on?0:st==='common'?Math.max(HEADER_SHOW,air.mTotal/(hi*1.96e-4)):st==='header'?Math.max(HEADER_SHOW,b.open?a.v.header:0):(['gauge','stub'].includes(st)?0:(a.v[st]||0));
   const idx=STAGE_ORDER[st]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[sec.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front));
-  const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9*FLOW_SLOW;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
+  const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9*FLOW_SLOW;u.uReach.value=on?reach:0;u.uAlpha.value=on?1:0;
   const sp=['common','header','hp'].includes(st)?SUPPLY:st==='auto'?autoOut(sec.branch):b&&handActive(sec.branch)?b.value:autoOut(sec.branch);
   u.uColor.value.set(AIR_SAFFRON)}
 }
@@ -324,7 +325,7 @@ const flangesAt=[];
 // After Start the supply header always shows air moving in from the inlet up to the shut-off valves, even while
 // they are closed (display speed only; the panel still reports the calculated flow).
 const HEADER_SHOW=.05;
-const FLOW_SLOW=.25,FILL_RATE=1.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
+const FLOW_SLOW=.08,FILL_RATE=.5,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
 const fill={common:0,port:0,stbd:0};
 function createPipeFog(count){
  const geo=new T.BufferGeometry(),pos=new Float32Array(count*3),col=new Float32Array(count*3),size=new Float32Array(count),alpha=new Float32Array(count);

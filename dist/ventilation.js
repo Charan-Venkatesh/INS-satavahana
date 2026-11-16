@@ -791,6 +791,7 @@ function tap(id) {
   if (mode && id === 'v114' && S.open.v114 && S.open.v122 && !crack114) { crack114 = true; p.wheelTarget = (p.openAngle + p.closedAngle) / 2; notify('Valve 114 · CRACKED OPEN', true); return; }
   if (id === 'v114' && crack114) crack114 = false;
   if (id === 'v126') { const open = !crack126; crack126 = open; S.open.v126 = open; p.wheelTarget = open ? (p.openAngle + p.closedAngle) / 2 : p.closedAngle; notify('Valve 126 · ' + (open ? 'CRACKED OPEN' : 'CLOSED'), true); setTimeout(() => checkStep(id, !open), 0); return; }
+  if ((id === 'fa' || id === 'fb') && S.flap[p.key] && mode !== 4) { notify('103 stays open — it opens automatically' + (mode ? ' in Mode ' + mode : ' with Start'), true); return; }
   const wasOn = isOn(p);
   if (p.type === 'valve' || p.type === 'flap') {
     const store = p.type === 'valve' ? S.open : S.flap;
@@ -833,7 +834,7 @@ function allOff() {
   for (const p of parts.values()) { if (p.wheel) p.wheelTarget = p.closedAngle; if (p.blade) p.bladeTarget = Math.PI / 2; }
 }
 function showRunState() { startBtn.innerHTML = S.running ? '<span>Ⅱ</span> Pause' : '<span>▶</span> Start'; startBtn.setAttribute('aria-pressed', String(S.running)); }
-startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) { allOff(); mode = 0; crack114 = crack126 = false; } showRunState(); });     // Pause: everything closes and stops, as on screen 1
+startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.running) { allOff(); mode = 0; crack114 = crack126 = false; } else { S.flap.a = S.flap.b = true; for (const id of ['fa', 'fb']) parts.get(id).bladeTarget = 0; } showRunState(); });   // 103 opens automatically with Start     // Pause: everything closes and stops, as on screen 1
 resetBtn?.addEventListener('click', () => { S.running = false; mode = 0; crack114 = crack126 = false; allOff(); Object.assign(S.pit, initial().pit); showRunState(); notify('Circuit reset — all valves closed, H₂ cleared.', true); });
 showRunState();
 
@@ -873,7 +874,8 @@ showRunState();
 .tap-tip::after{content:"";position:absolute;left:50%;bottom:-.5em;transform:translateX(-50%);border:.55em solid transparent;border-bottom:0;border-top-color:#1f7fbf}
 @keyframes tipBob{50%{translate:0 -.35em}}
 .mode-bar{display:none;gap:8px;font-family:Arial,sans-serif;margin-right:6px}
-body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:translateY(-50%)!important}
+@media(min-width:1500px){body.modes-on .header-title{left:clamp(300px,21vw,700px)!important;transform:translateY(-50%)!important}}
+@media(max-width:1499px){.mode-bar{position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);z-index:25;background:#ffffffe6;padding:6px;border-radius:12px;box-shadow:0 4px 16px #12405e26}}
 .mode-bar.show{display:flex;animation:fadeIn .35s ease}@keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .mode-bar button{font-size:clamp(12px,.85vw,22px)!important;min-width:clamp(78px,5.6vw,170px);min-height:clamp(46px,3vw,80px);text-align:center;padding:4px 10px;border-radius:10px;border:2px solid #1d4f6e;background:#fff;color:#1d4f6e;font:700 clamp(14px,1.05vw,24px)/1.15 Arial;box-shadow:0 4px 14px #12405e22;cursor:pointer;transition:background .2s,color .2s,transform .12s}
 .mode-bar button small{display:block;font-weight:400;font-size:.72em;opacity:.8}

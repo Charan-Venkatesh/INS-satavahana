@@ -216,7 +216,8 @@ for(const p of parts.values())p.group.visible=false;network.group.visible=false;
 // coloured by pressure stage; dead-end lines stay pressurised but still. Speeds are shown on a log scale
 // (0.01–10 m/s would otherwise be invisible or a blur); the panel lists the true values.
 let air={port:null,stbd:null,mTotal:0};
-const STAGE_COLOR={hi:new T.Color('#2a5cff'),mid:new T.Color('#1fa0ff'),lo:new T.Color('#2fd8ff'),relief:new T.Color('#46c8ff')};
+const AIR_SAFFRON='#FF671F';   // client: air flow in Indian Flag Saffron
+const STAGE_COLOR={hi:new T.Color(AIR_SAFFRON),mid:new T.Color(AIR_SAFFRON),lo:new T.Color(AIR_SAFFRON),relief:new T.Color(AIR_SAFFRON)};
 const visSpeed=v=>v>0?.35+.7*Math.log10(1+v/.01):0;           // 0.001 → 0.38, 0.04 → 0.84, 0.6 → 1.6, 3.7 → 2.2
 function computeAir(){
  const f=side=>{const b=branches[side];return branchFlow({open:flowing&&passes(side),auto:autoOut(side),hand:handActive(side),handSet:b.value,safety:SAFETY_SET,batteries:2})};
@@ -251,7 +252,7 @@ function buildStreamlines(){
  const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=4;scene.add(group);
  for(const sec of pipeSections){
   const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,
-   uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#1593e6')}},
+   uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#FF671F')}},
    vertexShader:'attribute float aU;attribute float aSeed;varying float vU;varying float vS;void main(){vU=aU;vS=aSeed;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
    fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;uniform vec3 uColor;varying float vU;varying float vS;void main(){if(vU/uLen>uReach)discard;float x=fract(uPhase*(.8+.4*vS)-vU/90.+vS*7.);float head=pow(1.-x,4.);float a=uAlpha*(.14+.86*head);if(a<.01)discard;gl_FragColor=vec4(mix(uColor,uColor*.55,head*.6),a);}'});
   // polyline length and a perpendicular frame per segment
@@ -265,12 +266,12 @@ function buildStreamlines(){
     u+=L}
    const g=new T.BufferGeometry();g.setAttribute('position',new T.Float32BufferAttribute(pos,3));g.setAttribute('aU',new T.Float32BufferAttribute(us,1));g.setAttribute('aSeed',new T.Float32BufferAttribute(seeds,1));
    group.add(new T.Line(g,mat))}
-  // dark-blue flow band inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
-  const band=new T.ShaderMaterial({transparent:true,depthWrite:false,uniforms:mat.uniforms,
+  // saffron (#FF671F, client) flow band inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
+  const band=new T.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,uniforms:mat.uniforms,
    vertexShader:'varying float vU;uniform float uLen;void main(){vU=uv.x*uLen;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;void main(){if(vU/uLen>uReach)discard;float x=fract(vU/60.-uPhase*.35);float b=smoothstep(0.,.25,x)*(1.-smoothstep(.45,.75,x));vec3 deep=vec3(.03,.16,.55);float a=min(1.,uAlpha)*(.62+.3*b);if(a<.01)discard;gl_FragColor=vec4(mix(deep,deep*.45,b),a);}'});
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;void main(){if(vU/uLen>uReach)discard;float x=fract(vU/60.-uPhase*.35);float b=smoothstep(0.,.25,x)*(1.-smoothstep(.45,.75,x));vec3 deep=vec3(1.,.404,.122),hi=vec3(1.,.72,.42);float a=min(1.,uAlpha);if(a<.01)discard;gl_FragColor=vec4(mix(deep,hi,b*.75),a);}'});
   const curve=new T.CurvePath();for(let i=1;i<P.length;i++)if(P[i].distanceTo(P[i-1])>.01)curve.add(new T.LineCurve3(P[i-1],P[i]));
-  if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(8,curve.curves.length*4),sec.rad*.72,12,false),band);tube.renderOrder=3;tube.frustumCulled=false;group.add(tube)}
+  if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(8,curve.curves.length*4),sec.rad*.92,12,false),band);tube.renderOrder=6;tube.frustumCulled=false;group.add(tube)}
   sec.branch=branch;sec.mat=mat;
  }
 }
@@ -281,7 +282,7 @@ function streamlineUpdate(dt){const hi=density(45);
   const idx=STAGE_ORDER[st]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[sec.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front));
   const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9*FLOW_SLOW;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
   const sp=['common','header','hp'].includes(st)?SUPPLY:st==='auto'?autoOut(sec.branch):b&&handActive(sec.branch)?b.value:autoOut(sec.branch);
-  u.uColor.value.set(st==='safety'?'#1a8fc4':sp>=10?'#2457d6':sp>=.3?'#1f86d1':'#1aa3c4')}
+  u.uColor.value.set(AIR_SAFFRON)}
 }
 function clearPipes(list,oldMaterial){
  model3d.traverse(n=>{if(n.isMesh&&n.material===oldMaterial)n.visible=false});
@@ -322,7 +323,7 @@ const flangesAt=[];
 // After Start the supply header always shows air moving in from the inlet up to the shut-off valves, even while
 // they are closed (display speed only; the panel still reports the calculated flow).
 const HEADER_SHOW=.05;
-const FLOW_SLOW=.45,FILL_RATE=1.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
+const FLOW_SLOW=.25,FILL_RATE=1.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
 const fill={common:0,port:0,stbd:0};
 function createPipeFog(count){
  const geo=new T.BufferGeometry(),pos=new Float32Array(count*3),col=new Float32Array(count*3),size=new Float32Array(count),alpha=new Float32Array(count);
@@ -718,7 +719,7 @@ header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d9
 .legend-card b{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:.4em;vertical-align:-.1em}`;document.head.append(st)}
  {const lg=document.createElement('div');lg.className='legend-card';lg.setAttribute('aria-label','Legend');
   lg.innerHTML='<h4>AIR PRESSURE</h4><div class="row"><span><i style="background:#2a5cff"></i>45 kg/cm²</span><span><i style="background:#1fa0ff"></i>0.45</span><span><i style="background:#2fd8ff"></i>0.13–0.16</span></div><h4 style="margin-top:.6em">VALVES</h4><div class="row"><span><b style="background:#22b45a"></b>Open / in range</span><span><b style="background:#d23b33"></b>Closed</span></div>';
-  window.__legendCard=lg}
+  }   /* client: legend removed */
  // Battery pit compartment: a box round the manifolds, safety valves and cells (as marked in the client's image).
  const PIT_TOP=1020-750,objs=[model3d,...topBatteries.map(t=>t.b.group),...scene.children.filter(o=>o.isMesh&&o.material===bellMaterial)];
  const pit=new T.Box3();for(const o of objs)pit.union(visibleBox(o,b=>(b.min.z+b.max.z)/2>PIT_TOP+20));

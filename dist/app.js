@@ -648,7 +648,7 @@ function clientAdditions(){
 .pit-meter button{width:2.4em;height:2.4em;border-radius:.6em;border:1px solid #a9c4d6;background:#fff;font:700 1.15em/1 Arial;color:#1d4d6b;padding:0}
 .pit-meter .ps{display:none!important;margin-top:.5em;font-size:.78em;line-height:1.3;color:#2c6b4f;font-weight:600;min-height:2.6em;display:flex;align-items:center;justify-content:center}
 .pit-meter.venting{border-color:#e2574c;box-shadow:0 0 0 .25em #e2574c33,0 .5em 1.6em #12405e26}.pit-meter.venting .ps{color:#c0392b}.pit-meter.venting .pv{color:#c0392b}
-.hr-read{position:absolute;transform:translate(-50%,-50%);font-size:clamp(4.6px,calc(var(--k,1)*16px),40px);width:10.5em;padding:.6em .7em .7em;border-radius:.9em;background:#ffffffee;border:1.5px solid #b4c7d3;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:auto;text-align:center;color:#173f57;font-family:Arial,sans-serif;transition:border-color .25s,box-shadow .25s}
+.hr-read{position:absolute;transform:translate(-50%,-50%);font-size:clamp(7px,calc(var(--k,1)*24px),56px);width:10.5em;padding:.6em .7em .7em;border-radius:.9em;background:#ffffffee;border:1.5px solid #b4c7d3;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:auto;text-align:center;color:#173f57;font-family:Arial,sans-serif;transition:border-color .25s,box-shadow .25s}
 .hr-read h3{margin:0;font-size:.78em;letter-spacing:.1em;color:#3c6680}
 .hr-read .hv{font:700 1.9em/1.15 Arial,sans-serif;color:#5d7281}.hr-read .hv small{font-size:.45em;font-weight:600;margin-left:.2em}
 .hr-read .track{position:relative;height:.5em;border-radius:.3em;background:#dfe8ee;margin:.35em 0 .25em;overflow:hidden}
@@ -695,6 +695,30 @@ function clientAdditions(){
 @media(max-width:700px){.cs-panel{display:none}}
 @media(max-width:520px){.hr-read .hs,.pit-meter .ps{display:none}}`;document.head.append(st)}
 
+ // ---- UI refresh (client: "work on this UI"): navy header, name-tag labels, state-coloured cards, legend. Screen 1 only.
+ {const st=document.createElement('style');st.textContent=`
+header{background:linear-gradient(90deg,#0d2536 0%,#14405a 55%,#1b5574 100%)!important;border-bottom:0!important;box-shadow:0 4px 18px #0b2a3d40;position:relative;z-index:30}
+header .header-title{color:#fff!important;text-shadow:0 2px 8px #0008;line-height:1.1!important}
+header .header-title::after{content:'INS SATHAVAHANA · CIRCUIT 1';display:block;font:700 clamp(9px,.62vw,16px)/1.9 Arial,sans-serif;letter-spacing:.28em;color:#8fc8e8;text-align:center;text-shadow:none}
+header .screens a{background:#ffffff14!important;border-color:#ffffff38!important;color:#d6e8f3!important;transition:background .2s}
+header .screens a:hover{background:#ffffff26!important}
+header .screens a[aria-current=page]{background:#fff!important;border-color:#fff!important;color:#0f2a3d!important}
+header #start{background:linear-gradient(180deg,#2bd06a,#16a34a)!important;border:0!important;color:#fff!important;border-radius:12px!important;font-weight:800!important;letter-spacing:.04em}
+header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d98a14)!important}
+#circuit .drawing-label{background:#ffffffec;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.6em;padding:.35em .7em .4em;box-shadow:0 .3em .9em #12405e22;color:#123a52!important;line-height:1.2;font-size:clamp(10px,.82vw,20px)}
+#circuit .drawing-label span,#circuit .drawing-label small{text-shadow:none!important}
+#circuit .drawing-label small{color:#1f7a70!important;font-weight:700!important;margin-top:.15em!important;font-size:.82em}
+#circuit .drawing-label.muted{background:#1d4f6e;color:#fff!important;border:0;border-radius:999px;padding:.32em 1em;letter-spacing:.24em;font-weight:700;box-shadow:0 .3em .9em #12405e33}
+.hr-read,.pit-meter{border-top-width:.32em!important;border-top-style:solid!important}
+.hr-read{border-top-color:#8aa0ad!important}.hr-read.ok{border-top-color:#22b45a!important}.hr-read.off{border-top-color:#e2574c!important}
+.pit-meter{border-top-color:#1f7fbf!important}.pit-meter.venting{border-top-color:#e2574c!important}
+.legend-card{position:absolute;left:24%;top:clamp(10px,1vw,24px);z-index:5;font:600 clamp(10px,.66vw,16px)/1.3 Arial,sans-serif;color:#173f57;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.9em;padding:.7em .9em;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:none;animation:fadeUp .7s .4s cubic-bezier(.2,.8,.2,1) both}
+.legend-card h4{margin:0 0 .45em;font-size:.82em;letter-spacing:.16em;color:#4a7088}
+.legend-card .row{display:flex;gap:1.1em;margin:.25em 0}.legend-card i{display:inline-block;width:1.6em;height:.5em;border-radius:.25em;margin-right:.4em;vertical-align:middle}
+.legend-card b{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:.4em;vertical-align:-.1em}`;document.head.append(st)}
+ {const lg=document.createElement('div');lg.className='legend-card';lg.setAttribute('aria-label','Legend');
+  lg.innerHTML='<h4>AIR PRESSURE</h4><div class="row"><span><i style="background:#2a5cff"></i>45 kg/cm²</span><span><i style="background:#1fa0ff"></i>0.45</span><span><i style="background:#2fd8ff"></i>0.13–0.16</span></div><h4 style="margin-top:.6em">VALVES</h4><div class="row"><span><b style="background:#22b45a"></b>Open / in range</span><span><b style="background:#d23b33"></b>Closed</span></div>';
+  circuit.append(lg)}
  // Battery pit compartment: a box round the manifolds, safety valves and cells (as marked in the client's image).
  const PIT_TOP=1020-750,objs=[model3d,...topBatteries.map(t=>t.b.group),...scene.children.filter(o=>o.isMesh&&o.material===bellMaterial)];
  const pit=new T.Box3();for(const o of objs)pit.union(visibleBox(o,b=>(b.min.z+b.max.z)/2>PIT_TOP+20));
@@ -727,7 +751,7 @@ function clientAdditions(){
   el.innerHTML='<h3>HAND REDUCER</h3><div class="hv"><span>0.00</span><small>kg/cm²</small></div><div class="track"><div class="fill"></div><div class="band"></div></div><div class="hs" role="status"></div><button type="button">↺ Reset</button>';
   el.querySelector('button').onclick=()=>{handStop(side);setHand(side,0)};
   hand2[side]={el,val:el.querySelector('.hv span'),bar:el.querySelector('.fill'),state:el.querySelector('.hs')};
-  anchor(el,P?c.x+460:c.x-460,c.z);handReadout(side)}
+  anchor(el,P?c.x+520:c.x-520,c.z);handReadout(side)}
 
 
  // Circuit status + step guide in the open middle of the drawing: what to do next and live readings per branch.

@@ -285,7 +285,8 @@ function plume(x, y, dx, dy, key, intake = false) {
   plumes.push({ o: P(x, y, PIPE_Y + 6), d: new T.Vector3(dx, 0, dy).normalize(), key, pos, al, sz, geo, mat: m, pts, parts, level: 0, intake });
 }
 function plumeUpdate(pl, dt, q) {
-  pl.level += ((q > 1 ? Math.min(1, .75 + q / 700) : 0) - pl.level) * Math.min(1, dt * 2);
+  const tgt = q > 1 ? Math.min(1, .75 + q / 700) : pl.intake && extGroup.visible ? .7 : 0;   // intake: always gently drawing while shown
+  pl.level += (tgt - pl.level) * Math.min(1, dt * 2);
   pl.mat.uniforms.uScale.value = pxPerUnit * renderer.getPixelRatio(); pl.pts.visible = pl.level > .01;
   if (!pl.pts.visible) return;
   const side = new T.Vector3(-pl.d.z, 0, pl.d.x);
@@ -294,10 +295,10 @@ function plumeUpdate(pl, dt, q) {
     if (p.age >= 1) { p.age %= 1; p.live = Math.random() < pl.level; p.sp = .75 + Math.random() * .5; p.sw = (Math.floor(Math.random() * 5) - 2) / 2 + (Math.random() - .5) * .12; p.up = Math.random(); p.ph = Math.random() * 6.28; }   // five jets
     if (!p.live) { pl.al[i] = 0; continue; }
     const t = pl.intake ? 1 - p.age : p.age;                                  // intake: same cloud run backwards, wide and far → narrow into the mouth
-    const run = (1 - Math.pow(1 - t, 1.6)) * (pl.intake ? 170 : 230) * p.sp, spread = (pl.intake ? 4 : 10) + t * (pl.intake ? 70 : 60);   // fast at the mouth, slowing as it mixes
+    const run = (1 - Math.pow(1 - t, 1.6)) * (pl.intake ? 85 : 230) * p.sp, spread = (pl.intake ? 3 : 10) + t * (pl.intake ? 42 : 60);   // fast at the mouth, slowing as it mixes
     const q3 = pl.o.clone().addScaledVector(pl.d, run).addScaledVector(side, p.sw * spread + Math.sin(t * 5 + p.ph) * 2);
     pl.pos[i * 3] = q3.x; pl.pos[i * 3 + 1] = q3.y + p.up * 10; pl.pos[i * 3 + 2] = q3.z;
-    pl.sz[i] = 12 + t * 30; pl.al[i] = pl.intake ? pl.level * .8 * Math.min(1, p.age / .15) * Math.min(1, t / .08) : pl.level * .95 * Math.min(1, t / .06) * Math.pow(1 - t, 1.2);
+    pl.sz[i] = 12 + t * 30; pl.al[i] = pl.intake ? pl.level * 1 * Math.min(1, p.age / .15) * Math.min(1, t / .08) : pl.level * .95 * Math.min(1, t / .06) * Math.pow(1 - t, 1.2);
   }
   pl.geo.attributes.position.needsUpdate = pl.geo.attributes.aAlpha.needsUpdate = pl.geo.attributes.aSize.needsUpdate = true;
 }
@@ -308,7 +309,7 @@ function arrow(x, y, dir, air, key, n = 3, gap = 30) {
   const g = new T.Group(); g.position.copy(P(x, y, 4)); g.rotation.y = -{ r: 0, d: -Math.PI / 2, l: Math.PI, u: Math.PI / 2 }[dir]; scene.add(g);
   const m = new T.MeshBasicMaterial({ color: AIR[air], transparent: true, opacity: .3 });
   for (let i = 0; i < n; i++) { const a = new T.Mesh(new T.ShapeGeometry(sh), m); a.rotation.x = -Math.PI / 2; a.position.z = (i - (n - 1) / 2) * gap; g.add(a); }
-  arrows.push({ m, key });
+  arrows.push({ m, key, g, x0: g.position.x });
 }
 
 // ---------------------------------------------------------------- parts
@@ -671,11 +672,11 @@ gateValve('kl', 380, DUCT_Y, 'Klinket', ['KLINKET']);
 diamond(-60, 1460, 'cool');
 blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', tagged('ext', ([fx, fy, fh], [ax, ay, ah]) => {
   pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');
-  arrow(-330, 1330, 'r', 'room', 'aiuQ', 1);                                           // air drawn in from outside
+  arrow(-330, 1330, 'r', 'room', 'aiuQ', 1); arrows[arrows.length - 1].glide = true;   // air drawn in from outside (glides into the inlet)
 }));
 symText('M/R', -328, DUCT_Y - 40, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
 symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
-plume(-300, 1330, -1, 0, 'aiuQ', true);                                    // client: air being drawn into the AIU blower (Mode 4)
+plume(-292, 1322, -1, 0, 'aiuQ', true);                                    // client: air being drawn into the AIU blower (Mode 4)
 TAG = null; symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
 
 TAG = 'ext';
@@ -1230,7 +1231,11 @@ function frame(now) {
   const dirty = tmpC.copy(AIR.dirty), px = pxPerUnit * renderer.getPixelRatio();
   for (const p of pipes) pipeUpdate(p, dt, p.reached ? flowOf(p.key) : 0, p.air === 'dirty' ? dirty : AIR[p.air], px, now);
   const pulse = .55 + .35 * Math.sin(now / 260);
-  for (const a of arrows) a.m.opacity = flowOf(a.key) > 1 ? pulse : .3;
+  for (const a of arrows) {
+    if (a.glide) { const run = flowOf(a.key) > 1, ph = (now / (run ? 2600 : 4200)) % 1;      // slow glide toward the motor, fading in and out
+      a.g.position.x = a.x0 - 40 + ph * 70; a.m.opacity = (run ? .95 : .6) * Math.sin(ph * Math.PI); continue; }
+    a.m.opacity = flowOf(a.key) > 1 ? pulse : .3;
+  }
 
   // valve wheels, flap blades, burners, lamps
   for (const p of parts.values()) {

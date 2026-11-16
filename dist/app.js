@@ -102,7 +102,7 @@ function paintBackdrop(){if(!webglAvailable)return;if(!backdrop)makeBackdrop();c
 function backdropUpdate(dt){if(!backdrop)return;const u=backdrop.u,k=Math.min(1,dt*2.5),ease=(o,t)=>o.value+=(t-o.value)*k;u.uTime.value+=dt;
  ease(u.uFlow,flowing?1:0);ease(u.uOk,['port','stbd'].some(s=>circuitOn(s)&&handInBand(s))?1:0);ease(u.uVent,pitVenting()||['port','stbd'].some(venting)?1:0);
  u.uMouse.value.z+=((backdrop.hover||0)-u.uMouse.value.z)*k}   // fitBox: camera frame around the real circuit; pitPressure: battery pit setting, kg/cm²
-let flowing=false,selected=null,labelVisible=false;document.querySelector('#circuit').classList.add('hide-labels');const parts=new Map(),labelNodes=[],hotspots=[],infoNodes={},wheels={},needles={},bodyGroups={};
+let flowing=false,selected=null,labelVisible=true;/* client: label the diagram (labels always on) */const parts=new Map(),labelNodes=[],hotspots=[],infoNodes={},wheels={},needles={},bodyGroups={};
 function label(text,x,z,align='left',sub='',classes=''){const el=document.createElement('div');el.className='drawing-label '+align+' '+classes;const strong=document.createElement('span');strong.textContent=text;el.append(strong);if(sub){const sm=document.createElement('small');sm.textContent=sub;el.append(sm)}labelsRoot.append(el);labelNodes.push({el,x,z});return el}
 function part(id,type,side,x,z,title,size=108){const g=new T.Group();g.position.copy(pos(x,z));scene.add(g);const data={id,type,side,x,z,title,group:g,size};parts.set(id,data);bodyGroups[id]=g;const b=document.createElement('button');b.className='part-button';b.dataset.part=id;b.setAttribute('aria-label',title);b.setAttribute('aria-pressed','false');b.addEventListener('click',event=>{select(id);if(['shutoff','auto','filter'].includes(type))tapSwitch(side,type);if(type==='hand'&&event.detail===0)handToggle(side)});if(type==='hand')handPressable(b,side);if(type==='safety')b.addEventListener('click',()=>{if(!circuitOn(side))circuitWarning(side)});if(['shutoff','auto','hand','filter','pg','safety'].includes(type))b.style.minWidth=b.style.minHeight='44px';   // stacked parts: areas must not overlap
  labelsRoot.append(b);hotspots.push({el:b,x,z,size});return g}
@@ -116,7 +116,7 @@ label('MP Air 45 kg/cm²',1050,110,'left');label('PORT',280,130,'center','','mut
 for(const [side,x] of [['port',350],['stbd',1420]]){
  const P=side==='port',B=P?'Port':'STBD',out=P?-1:1,inner=P?1:-1,pgX=P?165:1605,cellX=P?650:1120;
  let g=part(side+'-shutoff','shutoff',side,x,300,'Shut-off valve · '+B,92);cyl(g,55,17,mat.metal,0,4);cyl(g,48,7,mat.white,0,17);const wheel=new T.Group();wheel.position.y=24;g.add(wheel);line(wheel,[[-43,0,0],[43,0,0]]);line(wheel,[[0,0,-43],[0,0,43]]);g.userData.shutoffWheel=wheel;wheel.rotation.y=Math.PI/4;
- label('Shut-off valve',x,225,'center');
+ label('Shut-off valve',x,198,'center');
  pipe([[x,353],[x,401]],side);g=part(side+'-auto','auto',side,x,460,'Automatic reducer · '+B,92);squareSymbol(g,'V');label('Auto Reducer',x+inner*90,455,P?'left':'right','0.45 kg/cm²');
  pipe([[x,517],[x,584]],side);g=part(side+'-hand','hand',side,x,642,'Hand reducer · '+B,96);squareSymbol(g,'X');handWheel(g,side);label('Hand Reducer',x+inner*90,638,P?'left':'right','0.13–0.16 kg/cm²');
  // The whole hand reducer is one tap area: X body, brass bonnet and T-handle (from 48 inboard to 158 outboard).
@@ -134,7 +134,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  for(let k=0;k<6;k++){const sx=x+inner*(65+k*43);pipe([[sx,1080],[sx,1100]],side,'stub',5)}
 }
 // Drawing boundary, behind the components.
-const boundaryGeo=new T.BufferGeometry().setFromPoints([pos(100,1020,1),pos(1710,1020,1)]);const boundary=new T.Line(boundaryGeo,new T.LineDashedMaterial({color:'#adc1b1',dashSize:18,gapSize:14}));boundary.computeLineDistances();scene.add(boundary);label('BATTERY PIT',888,1050,'center','','muted');
+const boundaryGeo=new T.BufferGeometry().setFromPoints([pos(100,1020,1),pos(1710,1020,1)]);const boundary=new T.Line(boundaryGeo,new T.LineDashedMaterial({color:'#adc1b1',dashSize:18,gapSize:14}));boundary.computeLineDistances();scene.add(boundary);
 part('main-pipe','pipe','common',1120,185,'Transparent air pipe',150);{const pb=hotspots.pop();pb.el.remove()};
 network.finalize();
 
@@ -201,7 +201,7 @@ function clearSelection(){document.body.classList.remove('inspector-open');docum
 // × hides the Component Inspector on every screen size (on wide screens the circuit takes its column);
 // Controls or touching a part brings it back.
 document.querySelector('#clear').onclick=()=>{clearSelection();document.body.classList.add('inspector-hidden')};
-document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,auto:false,hand:false,filter:false,value:0,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;setPit(0);handStop('port');handStop('stbd');setHand('port',0);setHand('stbd',0);showRunState();if(labelVisible)document.querySelector('#labels-toggle').click();clearSelection()};
+document.querySelector('#reset').onclick=()=>{setView('top');for(const side of ['port','stbd']){Object.assign(branches[side],{open:false,auto:false,hand:false,filter:false,value:0,wheel:0});bodyGroups[side+'-shutoff'].userData.shutoffWheel.userData.target=WHEEL_SHUT;releasing[side]=0}flowing=false;setPit(0);handStop('port');handStop('stbd');setHand('port',0);setHand('stbd',0);showRunState();clearSelection()};
 document.querySelector('#reference').onclick=()=>document.querySelector('#reference-dialog').showModal();document.querySelector('#close-reference').onclick=()=>document.querySelector('#reference-dialog').close();
 document.querySelector('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{document.querySelector('#fullscreen').textContent='Use browser full screen'}};document.addEventListener('fullscreenchange',()=>document.querySelector('#fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen');
 // No OrbitControls, drag handlers, zoom or camera animation. Resize only fits the same plan.
@@ -279,7 +279,7 @@ function streamlineUpdate(dt){const hi=density(45);
   const on=flowing&&(st==='common'||st==='header'||(!!b&&b.open))&&(st!=='safety'||venting(sec.branch));
   const vel=!on?0:st==='common'?Math.max(HEADER_SHOW,air.mTotal/(hi*1.96e-4)):st==='header'?Math.max(HEADER_SHOW,b.open?a.v.header:0):(['gauge','stub'].includes(st)?0:(a.v[st]||0));
   const idx=STAGE_ORDER[st]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[sec.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front));
-  const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
+  const u=sec.mat.uniforms;u.uPhase.value+=dt*visSpeed(vel)*.9*FLOW_SLOW;u.uReach.value=on?reach:0;u.uAlpha.value=on?(vel>0?1:.4):0;
   const sp=['common','header','hp'].includes(st)?SUPPLY:st==='auto'?autoOut(sec.branch):b&&handActive(sec.branch)?b.value:autoOut(sec.branch);
   u.uColor.value.set(st==='safety'?'#1a8fc4':sp>=10?'#2457d6':sp>=.3?'#1f86d1':'#1aa3c4')}
 }
@@ -322,7 +322,7 @@ const flangesAt=[];
 // After Start the supply header always shows air moving in from the inlet up to the shut-off valves, even while
 // they are closed (display speed only; the panel still reports the calculated flow).
 const HEADER_SHOW=.05;
-const FILL_RATE=2.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
+const FLOW_SLOW=.45,FILL_RATE=1.2,STAGE_ORDER={common:0,header:1,hp:2,auto:3,hand:4,filter:5,gauge:6,manifold:6,safety:6.5,stub:7,hose:7};
 const fill={common:0,port:0,stbd:0};
 function createPipeFog(count){
  const geo=new T.BufferGeometry(),pos=new Float32Array(count*3),col=new Float32Array(count*3),size=new Float32Array(count),alpha=new Float32Array(count);
@@ -336,12 +336,12 @@ function createPipeFog(count){
 function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const v=new T.Vector3(),w=new T.Vector3(),c=new T.Color(),hi=density(45),F=nativeAir;
  // fill fronts: advance while air is admitted, drain twice as fast when it is shut off
  const step=(k,on)=>{fill[k]=on?fill[k]+dt*FILL_RATE:Math.max(0,fill[k]-dt*FILL_RATE*2)};
- step('common',flowing);for(const side of ['port','stbd'])step(side,flowing&&branches[side].open&&fill.common>=2);
+ step('common',flowing);for(const side of ['port','stbd']){step(side,flowing&&branches[side].open&&fill.common>=2);if(branches[side].value<=0)fill[side]=Math.min(fill[side],3)}   // client: air stops at the hand reducer until it is tapped
  F.mat.uniforms.uScale.value=renderer.domElement.height/(camera.top-camera.bottom);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
   const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
   const vel=!pressurised?0:p.stage==='common'?Math.max(HEADER_SHOW,air.mTotal/(hi*1.96e-4)):p.stage==='header'?Math.max(HEADER_SHOW,b.open?a.v.header:0):(['gauge','stub'].includes(p.stage)?0:(a.v[p.stage]||0));
-  p.ph+=dt*10*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
+  p.ph+=dt*10*FLOW_SLOW*visSpeed(vel);const fr=(p.src||p).frames,n=fr.length,f=Math.floor(p.ph)%n;v.fromArray(fr[f]);const next=fr[(f+1)%n];if(next&&v.distanceTo(w.fromArray(next))<25)v.lerp(w,p.ph%1);
   // how far the released air has reached this section, and whether this puff is behind the front
   const idx=STAGE_ORDER[p.stage]??7,front=idx<2?fill.common-idx:Math.min(fill.common-idx,fill[p.branch]-(idx-2)),reach=Math.max(0,Math.min(1,front)),filled=reach>=1||(f/n)<=reach;
   F.pos[i*3]=v.x;F.pos[i*3+1]=v.y;F.pos[i*3+2]=v.z;
@@ -721,11 +721,11 @@ function clientAdditions(){
   el.innerHTML='<h3>HAND REDUCER</h3><div class="hv"><span>0.00</span><small>kg/cm²</small></div><div class="track"><div class="fill"></div><div class="band"></div></div><div class="hs" role="status"></div><button type="button">↺ Reset</button>';
   el.querySelector('button').onclick=()=>{handStop(side);setHand(side,0)};
   hand2[side]={el,val:el.querySelector('.hv span'),bar:el.querySelector('.fill'),state:el.querySelector('.hs')};
-  anchor(el,P?c.x+215:c.x-215,c.z);handReadout(side)}
+  anchor(el,P?c.x+460:c.x-460,c.z);handReadout(side)}
 
 
  // Circuit status + step guide in the open middle of the drawing: what to do next and live readings per branch.
- {const el=document.createElement('div');el.className='cs-panel';el.setAttribute('role','status');el.setAttribute('aria-live','polite');
+ if(false){const el=document.createElement('div');el.className='cs-panel';   /* client: Circuit Status panel removed */el.setAttribute('role','status');el.setAttribute('aria-live','polite');
   anchor(el,(x0+x1)/2,(all.min.z+z0)/2+30);let shown='',lastMsg='';
   const row=(lb,f)=>'<div class="lb">'+lb+'</div>'+['port','stbd'].map(s=>{const [t,c]=f(s);return '<div class="v '+c+'">'+t+'</div>'}).join('');
   const render=()=>{const any=['port','stbd'].filter(s=>circuitOn(s)),ok=any.filter(handInBand),vent=pitVenting();

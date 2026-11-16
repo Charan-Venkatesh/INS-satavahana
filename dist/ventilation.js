@@ -57,7 +57,7 @@ const mat = {
   red: new T.MeshStandardMaterial({ color: '#c8322b', metalness: .3, roughness: .4 }),
   glass: new T.MeshPhysicalMaterial({ color: '#8fb3c6', metalness: 0, roughness: .06, transparent: true, opacity: .34, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: 1.6 }),   // writes depth: overlapping pipes show one glass surface, so joints blend
   flange: new T.MeshStandardMaterial({ color: '#9aa6ad', metalness: .8, roughness: .35 }),
-  pit: new T.MeshBasicMaterial({ color: '#1d5f8a', transparent: true, opacity: .08, depthWrite: false })   // light see-through tint, as on screen 1
+  pit: new T.MeshBasicMaterial({ color: '#14b8a6', transparent: true, opacity: .09, depthWrite: false })   // light see-through tint, as on screen 1
 };
 
 // ---------------------------------------------------------------- backdrop and battery pit
@@ -97,7 +97,7 @@ void main(){vec2 q=(vP-uCenter)/uHalf;float t=uTime,r=length(q*vec2(.85,1.));
 })();
 {
   const pit = new T.Mesh(new T.PlaneGeometry(1780, 370), mat.pit); pit.rotation.x = -Math.PI / 2; pit.position.copy(P(1000, 1340, -20)); scene.add(pit);
-  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(1780, 370)), new T.LineBasicMaterial({ color: '#2d4f66' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(P(1000, 1340, -19)); scene.add(edge);
+  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(1780, 370)), new T.LineBasicMaterial({ color: '#2a9d8f' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(P(1000, 1340, -19)); scene.add(edge);
   const dash = new T.Line(new T.BufferGeometry().setFromPoints([P(90, 1150, -18), P(1890, 1150, -18)]), new T.LineDashedMaterial({ color: '#7d94a0', dashSize: 16, gapSize: 12 })); dash.computeLineDistances(); scene.add(dash);
 }
 const batteries = [];
@@ -522,7 +522,7 @@ pipe('h2', 'J2', 'qb', [[705, 585], [790, 585], [790, 512]], 'clean');
 pipe('J2', 'clr', 'qm', [[790, 512], [910, 512]], 'clean');
 pipe('clr', 'S2', 'qm', [[910, 512], [1035, 512]], 'clean');
 pipe('S2', 'v109', 'q1', [[1035, 512], [1035, 420], [1140, 420]], 'clean');
-pipe('S2', 'v110', 'q2', [[1035, 512], [1035, 555], [1150, 555]], 'clean');
+pipe('S2', 'v110', 'q2', [[1035, 512], [1035, 665], [1150, 665]], 'clean');
 // blower outlets → common line → 114 (compartment) and 117 (return to the pit through the non-return valve)
 pipe('J3', 'T117', 'qm', [[1445, 450], [1545, 450]], 'clean');
 pipe('T117', 'v114', 'toCompt', [[1545, 450], [1580, 450]], 'clean');
@@ -542,7 +542,7 @@ valve('v123', 270, 1000, true, 'Valve 123', 'left');
 gateValve('v58', 140, 360, 'Exhaust Klinket 58');
 valve('v122', 385, 1000, true, 'Valve 122', 'right');
 valve('v109', 1140, 420, false, 'Valve 109');
-valve('v110', 1150, 555, false, 'Valve 110');
+valve('v110', 1150, 665, false, 'Valve 110');
 valve('v114', 1580, 450, false, 'Valve 114');
 valve('v117', 1545, 960, true, 'Valve 117', 'left');
 valve('vin', 1640, 950, true, 'Valve 118 (inlet from outside)', 'right');
@@ -566,8 +566,8 @@ blower('b1', 1300, 420, 140, 'Blower 1', ([fx, fy, fh], [ax, ay, ah], h) => {
   pipe('v109', 'b1', 'q1', [[1140, 420], [1300, 420]], 'clean'); flange(P(1298, 420, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b1', 'J3', 'q1', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // as drawn: out of the top, straight right, down to the common line
 });
-blower('b2', 1300, 555, 140, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
-  pipe('v110', 'b2', 'q2', [[1150, 555], [1300, 555]], 'clean'); flange(P(1298, 555, PIPE_Y), new T.Vector3(1, 0, 0), 13);
+blower('b2', 1300, 665, 140, 'Blower 2', ([fx, fy, fh], [ax, ay, ah], h) => {
+  pipe('v110', 'b2', 'q2', [[1150, 665], [1300, 665]], 'clean'); flange(P(1298, 665, PIPE_Y), new T.Vector3(1, 0, 0), 13);
   pipe('b2', 'J3', 'q2', [[fx, fy, fh], [ax, ay, ah], [1445, ay, ah], [1445, 450]], 'clean');   // out of the top, straight right, up to the common line
 });
 blower('bg', 650, 880, 122, 'Galley blower', ([fx, fy, fh], [ax, ay, ah], h) => {
@@ -703,7 +703,7 @@ blower('std', -60, SUC, 105, 'Standard Blower 127', tagged('ext', ([fx, fy, fh],
 plume(-322, 185, -1, 0, 'm3'); arrow(-345, 185, 'l', 'dirty', 'm3', 1); arrow(235, SUC, 'l', 'room', 'co2', 1);
 { const g = new T.Group(); g.position.copy(P(-260, 215, SYM_Y)); scene.add(g); symLine(g, 0, 12, 0, -14, 3.5); symLine(g, 0, -16, -8, -5, 3.5); symLine(g, 0, -16, 8, -5, 3.5); }   // ↑ on the outlet
 symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -60, SUC + 72, 13);
-symText('FROM CARBON DIOXIDE', 128, SUC + 48, 11); symText('AIR PURIFICATION UNIT', 128, SUC + 66, 11);
+symText('FROM CARBON DIOXIDE', 118, SUC + 78, 11); symText('AIR PURIFICATION UNIT', 118, SUC + 96, 11);
 { const pts = [P(-370, 150, 2), P(205, 150, 2), P(205, 1665, 2), P(-370, 1665, 2), P(-370, 150, 2)];   // dashed engine-room boundary
   const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
 { const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
@@ -817,7 +817,7 @@ const blowerView = (id, title, flow) => openBlowerDetail({
   toggle: () => { const before = S.on[id]; tapAt[id] = -1e9; tap(id); return S.on[id] === before ? warnEl.textContent : ''; }
 });
 const SPOTS = [
-  ['b1', 1355, 468, () => blowerView('b1', 'Blower 1', () => flows.q1)], ['b2', 1355, 603, () => blowerView('b2', 'Blower 2', () => flows.q2)],
+  ['b1', 1398, 470, () => blowerView('b1', 'Blower 1', () => flows.q1)], ['b2', 1398, 715, () => blowerView('b2', 'Blower 2', () => flows.q2)],
   ['bg', 705, 925, () => blowerView('bg', 'Galley blower', () => flows.qg)],
   ['cellsL', 760, 1350, () => openBatteryDetail({ side: 'port', pressure: .145, title: 'Battery cell · left bank (pit air out)' })],
   ['cellsR', 1550, 1350, () => openBatteryDetail({ side: 'stbd', pressure: .145, title: 'Battery cell · right bank (fresh air in)' })]
@@ -921,9 +921,9 @@ const anchored = [];                                    // HTML pinned to plan p
 function pin(el, x, y) { labelsRoot.append(el); const a = { el, x, y }; anchored.push(a); return a; }
 
 // ---- every valve port number on the drawing
-const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 598],
+const PORTS = [['v58', '58', 140, 398], ['fa', '103', 490, 398], ['fb', '103', 490, 628], ['v109', '109', 1140, 378], ['v110', '110', 1150, 708],
   ['v114', '114', 1580, 408], ['v117', '117', 1500, 960], ['vin', '118', 1688, 950], ['v122', '122', 432, 1000], ['v123', '123', 222, 1000],
-  ['v134', '134', 568, 990], ['fg', 'Galley flap', 482, 825], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -212, LOW + 55], ['v128', '128', 88, 530], ['v129', '129', 120, 652]];
+  ['v134', '134', 568, 990], ['fg', 'Galley flap', 505, 778], [null, '101', 340, 936], ['v124', '124', -320, 645], ['v125', '125', -305, 430], ['v126', '126', -160, LOW + 100], ['v128', '128', 88, 530], ['v129', '129', 172, 735]];
 for (const [id, n, x, y] of PORTS) { const el = document.createElement('div'); el.className = 'port-no'; el.textContent = n; pin(el, x, y); }
 
 // ---- burner temperature box: blue below 40 °C, orange 40–70 °C, red above 70 °C
@@ -1008,7 +1008,7 @@ const MORE_INFO = [
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 SPOTS.push(...MORE_INFO);
 const EXT_SPOTS = new Set(['exb', 'std', 'aiu']);
-SPOTS.push(...[['exb', -50, 305, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', 12, 652, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
+SPOTS.push(...[['exb', -50, 305, () => blowerView('exb', 'Exhaust Blower', () => flows.exq)], ['std', 40, 772, () => blowerView('std', 'Standard Blower 127', () => flows.m3)],
   ['aiu', -160, 1282, () => blowerView('aiu', 'Air Induction Unit blower', () => flows.aiuQ)]].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
 
 // ---- ventilation modes 1, 2 and 5 (3 and 4 follow with the engine-room section)
@@ -1050,7 +1050,7 @@ const modesEl = document.createElement('div'); modesEl.className = 'vcard modes'
 pin(modesEl, 1180, 905);
 const tapTips = [];
 function drawModes() {
-  const { st, i } = progress(), m = MODES[mode];
+  const { st, i } = progress(), m = MODES[mode]; modesEl.style.display = m ? '' : 'none';
   const tab = (k, name, dis) => '<button type="button" data-m="' + k + '"' + (mode == k ? ' class="on"' : '') + (dis ? ' disabled title="Comes with the engine-room section"' : '') + '>Mode ' + k + '<small>' + name + '</small></button>';
   let html = '<h3>BATTERY PIT VENTILATION' + (m ? ' · MODE ' + mode : '') + '</h3>';
   if (!S.running) html += '<div class="hint">Press ▶ Start, then choose a mode (1–5) at the top of the screen.</div>';
@@ -1107,14 +1107,35 @@ const modeSelect = modeSel.querySelector('select');
 modeSelect.addEventListener('change', () => { if (modeSelect.value) chooseMode(+modeSelect.value); });
 { const st = document.createElement('style'); st.textContent = `
 .mode-bar{display:none!important}
+.vcard.modes{display:none!important}
 .mode-select{display:flex;align-items:center;gap:10px;margin-right:6px;font:700 13px Arial,sans-serif;letter-spacing:.14em;color:#4a7088}
 .mode-select select{-webkit-appearance:none;appearance:none;min-height:52px;min-width:clamp(210px,14vw,320px);padding:0 44px 0 16px;border-radius:12px;border:2px solid #1d4f6e;background:#fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231d4f6e' stroke-width='2.4' fill='none'/%3E%3C/svg%3E") no-repeat right 16px center;color:#1d4f6e;font:700 clamp(14px,.95vw,22px) Arial,sans-serif;letter-spacing:0;cursor:pointer;box-shadow:0 4px 14px #12405e1f;transition:border-color .2s,box-shadow .2s}
 .mode-select select:hover{box-shadow:0 0 0 4px #1d4f6e22,0 4px 14px #12405e1f}
 .mode-select select:focus-visible{outline:3px solid #1f7fbf;outline-offset:2px}
 .mode-select.on select{background-color:#1d4f6e;color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%23ffffff' stroke-width='2.4' fill='none'/%3E%3C/svg%3E")}
 .mode-select option{color:#173f57;background:#fff}
-@media(max-width:1500px){header .header-title{left:clamp(300px,24vw,430px)!important;transform:translateY(-50%)!important;font-size:clamp(15px,1.6vw,26px)!important}.mode-select span{display:none}.mode-select select{min-width:190px}}
-@media(max-width:1199px){header .header-title{display:none!important}}`; document.head.append(st); }
+@media(max-width:1500px){.mode-select span{display:none}.mode-select select{min-width:190px}}
+@media(max-width:1399px){header .header-title{display:none!important}}`; document.head.append(st); }
+// Client: "match Circuit 1" - same navy header, pill tabs, Start/Pause colours and white name-tag port numbers (no coloured fill).
+{ const st = document.createElement('style'); st.textContent = `
+header{background:linear-gradient(90deg,#0d2536 0%,#14405a 55%,#1b5574 100%)!important;border-bottom:0!important;box-shadow:0 4px 18px #0b2a3d40;position:relative;z-index:30}
+header .header-title{color:#fff!important;text-shadow:0 2px 8px #0008;line-height:1.1!important}
+header .header-title::after{content:'INS SATHAVAHANA · CIRCUIT 2';display:block;font:700 clamp(9px,.62vw,16px)/1.9 Arial,sans-serif;letter-spacing:.28em;color:#8fc8e8;text-align:center;text-shadow:none}
+header .screens a{background:#ffffff14!important;border-color:#ffffff38!important;color:#d6e8f3!important;transition:background .2s}
+header .screens a:hover{background:#ffffff26!important}
+header .screens a[aria-current=page]{background:#fff!important;border-color:#fff!important;color:#0f2a3d!important}
+header #start{background:linear-gradient(180deg,#2bd06a,#16a34a)!important;border:0!important;color:#fff!important;border-radius:12px!important;font-weight:800!important;letter-spacing:.04em}
+header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d98a14)!important}
+header #reset{background:#ffffff14!important;border:1px solid #ffffff38!important;color:#e6f1f8!important;border-radius:12px!important;font-weight:700}
+header #reset:hover{background:#ffffff26!important}
+.mode-select{color:#8fc8e8}
+.mode-select select{border-color:#ffffff55;background-color:#ffffff;color:#0f2a3d}
+.mode-select.on select{background-color:#fff;color:#0f2a3d;border-color:#fff;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='9'%3E%3Cpath d='M1 1l6 6 6-6' stroke='%231d4f6e' stroke-width='2.4' fill='none'/%3E%3C/svg%3E")}
+.port-no{background:#ffffffec!important;color:#123a52!important;border:1px solid #cfdde7!important;border-left:.28em solid #1f7fbf!important;border-radius:.45em;box-shadow:0 .2em .6em #12405e22;padding:.16em .4em .16em .34em}
+.port-no.dim{opacity:.55!important}
+.port-no.is-open{border-left-color:#16a34a!important;color:#0f6b36!important;opacity:1!important}
+.port-no.is-crack{border-left-color:#d98a14!important;color:#9a5a06!important;opacity:1!important}
+.port-no.use{border-left-color:#1f7fbf!important;color:#0f4566!important;box-shadow:0 0 0 .18em #1f7fbf55,0 .2em .6em #12405e22}`; document.head.append(st); }
 function drawModeBar() {
   if (modeSelect.value !== String(mode || '')) modeSelect.value = mode ? String(mode) : ''; modeSel.classList.toggle('on', !!mode);
   if ((mode === 3 || mode === 4) !== extOn) setExt(mode === 3 || mode === 4);

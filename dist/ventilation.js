@@ -663,6 +663,10 @@ for (const [i, x] of [[1, 620], [2, 1000], [3, 1380]]) {
 valve('vmr', -270, DUCT_Y, false, 'M/R valve', 'bottom');
 valve('ver', 1880, DUCT_Y, false, 'E/R valve', 'bottom');
 gateValve('kl', 380, DUCT_Y, 'Klinket', ['KLINKET']);
+{ // client drawing: the Klinket's handle arm carries on to the right as a thin line and ends in a thick stroke down to the duct
+  const g = new T.Group(); g.position.copy(P(380, DUCT_Y, SYM_Y)); scene.add(g);
+  symLine(g, 32, -36, 190, -36, 2.6); symLine(g, 190, -54, 190, -14, 4);
+}
 diamond(-60, 1460, 'cool');
 blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', tagged('ext', ([fx, fy, fh], [ax, ay, ah]) => {
   pipe('aiu', 'aclr', 'aiuQ', [[fx, fy, fh], [ax, ay, ah], [-60, ay, ah], [-60, 1460]], 'room');

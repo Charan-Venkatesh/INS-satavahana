@@ -122,7 +122,7 @@ for(const [side,x] of [['port',350],['stbd',1420]]){
  // The whole hand reducer is one tap area: X body, brass bonnet and T-handle (from 48 inboard to 158 outboard).
  {const hb=hotspots[hotspots.length-1];hb.x=x+out*55;hb.size=210;hb.h=96}
  pipe([[x,699],[x,758]],side);g=part(side+'-filter','filter',side,x,820,'Filter · '+B,80);const diamond=box(g,88,88,27,mat.edge);diamond.rotation.y=Math.PI/4;const face=box(g,80,80,29,mat.white,0,2);face.rotation.y=Math.PI/4;label('Filter',x+inner*100,820,P?'left':'right');
- pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,80);gauge(g,side);pgLabels[side]=label('PG',pgX,705,'center','0.000 kg/cm²').querySelector('small');
+ pipe([[x,883],[x,1080]],side);pipe([[x,950],[pgX,950],[pgX,842]],side,'gauge',10);g=part(side+'-pg','pg',side,pgX,790,'Pressure gauge · '+B,80);gauge(g,side);pgLabels[side]=label('PG',pgX+inner*66,878,P?'left':'right','0.000').querySelector('small');
  pipe([[x,1080],[x+inner*345,1080]],side,'cells');pipe([[x,1080],[x,1190]],side,'safety');
  g=part(side+'-safety','safety',side,x,1240,'Safety valve · '+B,115);g.userData.pendingSafety=true;cyl(g,50,22,mat.yellow,0,8);label('Safety Valve',x,1340,'center','0.2 kg/cm²');
  g=part(side+'-battery','battery',side,cellX,1252,'Battery cell · '+B,310);battery(g);g.rotation.y=P?Math.PI:0;label('To the Cells',cellX,1140,'center');
@@ -187,7 +187,7 @@ const openBattery=side=>openBatteryDetail({side,pressure:pgValue(side)||(branche
 const venting=side=>flowing&&passes(side)&&pgValue(side)>SAFETY_SET,pitVenting=()=>pitPressure>SAFETY_SET;   // relief lifts above 0.2: hand reducer OFF (0.45) or auto bypass (45) vents, hand ON (0.13–0.16) stays shut
 function action(a){if(a==='toggleair'){document.querySelector('#air').click();return}if(!selected)return;const p=parts.get(selected),b=branches[p.side];if(a==='battery3d'){openBattery(p.side);return}if(a==='open'&&!flowing){circuitWarning(p.side,true);details();return}   // FR-SI-01: no opening while the circuit is OFF
  if(a==='open'||a==='close'){b.open=a==='open';b.auto=b.filter=b.open;turnWheel(p.side);showRunState()}if(a==='handon'||a==='handoff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}b.hand=a==='handon'}if(a==='autoon'||a==='autooff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}if(a==='autooff'&&b.open){circuitWarning(p.side,false,'auto reducer');details();return}b.auto=a==='autoon'}if(a==='filteron'||a==='filteroff'){if(!circuitOn(p.side)){circuitWarning(p.side);details();return}if(a==='filteroff'&&b.open){circuitWarning(p.side,false,'filter');details();return}b.filter=a==='filteron'}if(a==='increase'||a==='decrease'){setHand(p.side,b.value+(a==='increase'?HAND_STEP:-HAND_STEP))}if(a==='release')releasing[p.side]=performance.now()<(releasing[p.side]||0)?0:Infinity;details()}
-function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),over=v>DIAL_MAX,t=v.toFixed(3)+' kg/cm²'+(over?' · OVER RANGE':'');{const d=dialCanvases[side],s=v.toFixed(3);if(d&&d.shown!==s){d.shown=s;dialFace(d.cv.getContext('2d'),2048,v);d.tex.needsUpdate=true}}if(pgLabels[side]&&pgLabels[side].textContent!==t){pgLabels[side].textContent=t;pgLabels[side].style.color=over?'#c0392b':''}needles[side].rotation.y=-(Math.min(v,DIAL_MAX*1.04)/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
+function updateFlow(){for(const p of pipes){const b=branches[p.branch];const open=!b||passes(p.branch);const isSafety=p.kind==='safety';const active=flowing&&(p.kind==='header'||open)&&(!isSafety||venting(p.branch));p.flow=active?1:0;p.intensity=active?.85:0;p.state=active?'flowing':'empty'}for(const side of ['port','stbd']){const v=pgValue(side),over=v>DIAL_MAX,t=v.toFixed(3)+(over?' OVER':'');{const d=dialCanvases[side],s=v.toFixed(3);if(d&&d.shown!==s){d.shown=s;dialFace(d.cv.getContext('2d'),2048,v);d.tex.needsUpdate=true}}if(pgLabels[side]&&pgLabels[side].textContent!==t){pgLabels[side].textContent=t;pgLabels[side].style.color=over?'#c0392b':''}needles[side].rotation.y=-(Math.min(v,DIAL_MAX*1.04)/DIAL_MAX)*Math.PI*1.5+Math.PI*.75-(needles[side].userData.nativeBaseline||0);const w=wheels[side],axis=w.userData.nativeAxis||'x',target=(w.userData.restAngle||0)+branches[side].wheel;w.rotation[axis]+=(target-w.rotation[axis])*.16}}
 function showRunState(){
  for(const id of ['#air','#start']){const button=document.querySelector(id);button.innerHTML=flowing?'<span>Ⅱ</span> Pause':'<span>▶</span> Start';button.setAttribute('aria-pressed',String(flowing));button.disabled=!webglAvailable}
  document.querySelector('#flow-status').textContent=webglAvailable?(flowing?'PORT '+(branches.port.open?'ON':'OFF')+' · STBD '+(branches.stbd.open?'ON':'OFF'):'READY · PRESS START'):'STATIC 3D VIEW';document.querySelector('.live-dot').style.background=flowing?'#1caf93':'#97a89c';
@@ -336,7 +336,7 @@ function createPipeFog(count){
 function nativeAirUpdate(dt){if(!nativeAir)return;computeAir();const v=new T.Vector3(),w=new T.Vector3(),c=new T.Color(),hi=density(45),F=nativeAir;
  // fill fronts: advance while air is admitted, drain twice as fast when it is shut off
  const step=(k,on)=>{fill[k]=on?fill[k]+dt*FILL_RATE:Math.max(0,fill[k]-dt*FILL_RATE*2)};
- step('common',flowing);for(const side of ['port','stbd']){step(side,flowing&&branches[side].open&&fill.common>=2);if(branches[side].value<=0)fill[side]=Math.min(fill[side],3)}   // client: air stops at the hand reducer until it is tapped
+ step('common',flowing);for(const side of ['port','stbd']){step(side,flowing&&branches[side].open&&fill.common>=2);if(branches[side].value<=0)fill[side]=Math.min(fill[side],2)}   // client: air stops at the hand reducer until it is tapped
  F.mat.uniforms.uScale.value=renderer.domElement.height/(camera.top-camera.bottom);
  for(let i=0;i<nativeAirFrames.length;i++){const p=nativeAirFrames[i],b=branches[p.branch],a=air[p.branch];
   const pressurised=flowing&&p.kind!=='release'&&(p.kind==='header'||(!!b&&b.open))&&(p.kind!=='safety'||venting(p.branch));
@@ -517,7 +517,7 @@ function applyBatteryView(){
  for(const side in hoseAir)for(const p of hoseAir[side])p.frames=top&&p.framesTop?p.framesTop:p.framesFront;
 }
 function lidVapourUpdate(dt){
- const px=renderer.domElement.height/(camera.top-camera.bottom),lv=side=>flowing&&passes(side)?Math.min(1,.35+pgValue(side)/.16*.4):0;
+ const px=renderer.domElement.height/(camera.top-camera.bottom),lv=side=>flowing&&passes(side)&&branches[side].value>0?Math.min(1,.35+pgValue(side)/.16*.4):0;
  for(const l of lidVapours)l.vap.update(dt,lv(l.side),l.vent,px*l.scale,false);
  for(const t of topBatteries)t.b.update(dt,lv(t.side),px*t.sc);
 }
@@ -712,13 +712,13 @@ header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d9
 .hr-read,.pit-meter{border-top-width:.32em!important;border-top-style:solid!important}
 .hr-read{border-top-color:#8aa0ad!important}.hr-read.ok{border-top-color:#22b45a!important}.hr-read.off{border-top-color:#e2574c!important}
 .pit-meter{border-top-color:#1f7fbf!important}.pit-meter.venting{border-top-color:#e2574c!important}
-.legend-card{position:absolute;left:24%;top:clamp(10px,1vw,24px);z-index:5;font:600 clamp(10px,.66vw,16px)/1.3 Arial,sans-serif;color:#173f57;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.9em;padding:.7em .9em;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:none;animation:fadeUp .7s .4s cubic-bezier(.2,.8,.2,1) both}
+.legend-card{position:absolute;transform:translate(-50%,-50%);z-index:5;font:600 clamp(10px,.66vw,16px)/1.3 Arial,sans-serif;color:#173f57;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.9em;padding:.7em .9em;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:none;animation:fadeUp .7s .4s cubic-bezier(.2,.8,.2,1) both}
 .legend-card h4{margin:0 0 .45em;font-size:.82em;letter-spacing:.16em;color:#4a7088}
 .legend-card .row{display:flex;gap:1.1em;margin:.25em 0}.legend-card i{display:inline-block;width:1.6em;height:.5em;border-radius:.25em;margin-right:.4em;vertical-align:middle}
 .legend-card b{display:inline-block;width:.8em;height:.8em;border-radius:50%;margin-right:.4em;vertical-align:-.1em}`;document.head.append(st)}
  {const lg=document.createElement('div');lg.className='legend-card';lg.setAttribute('aria-label','Legend');
   lg.innerHTML='<h4>AIR PRESSURE</h4><div class="row"><span><i style="background:#2a5cff"></i>45 kg/cm²</span><span><i style="background:#1fa0ff"></i>0.45</span><span><i style="background:#2fd8ff"></i>0.13–0.16</span></div><h4 style="margin-top:.6em">VALVES</h4><div class="row"><span><b style="background:#22b45a"></b>Open / in range</span><span><b style="background:#d23b33"></b>Closed</span></div>';
-  circuit.append(lg)}
+  window.__legendCard=lg}
  // Battery pit compartment: a box round the manifolds, safety valves and cells (as marked in the client's image).
  const PIT_TOP=1020-750,objs=[model3d,...topBatteries.map(t=>t.b.group),...scene.children.filter(o=>o.isMesh&&o.material===bellMaterial)];
  const pit=new T.Box3();for(const o of objs)pit.union(visibleBox(o,b=>(b.min.z+b.max.z)/2>PIT_TOP+20));
@@ -774,6 +774,7 @@ header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d9
     +'</div><div class="cs-pit"><span>Battery pit</span>'+pitPressure.toFixed(2)+' kg/cm² · '+(vent?'<b style="color:#c0392b">VENTING</b>':'<b style="color:#14864a">SAFE</b>')+'</div>';
    if(html!==shown){shown=html;el.innerHTML=html;const st=el.querySelector('.cs-step');if(st&&msg!==lastMsg){st.classList.add('enter');lastMsg=msg}}};
   render();setInterval(render,200)}
+ if(window.__legendCard&&hands.port&&hands.stbd){const a=hands.port.getCenter(new T.Vector3()),b=hands.stbd.getCenter(new T.Vector3());anchor(window.__legendCard,(a.x+b.x)/2,a.z)}   // empty centre of the drawing
  // Fit the fixed top view to the circuit and its pit box with a slim margin.
  const fit=all.clone().union(new T.Box3(new T.Vector3(x0-W,yb,z0-W),new T.Vector3(x1+W,yb+H,z1+W)));
  const fw=fit.max.x-fit.min.x,fh=fit.max.z-fit.min.z;fitBox={cx:(fit.min.x+fit.max.x)/2,cz:(fit.min.z+fit.max.z)/2,w:fw*1.04,h:fh*1.04};document.querySelector('#viewport').style.inset='10px 8px 10px';

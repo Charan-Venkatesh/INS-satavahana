@@ -249,7 +249,7 @@ function glassEnvironment(){
 // tail travels along each one at the section's calculated speed. They appear only where released air has reached.
 const pipeSections=[],STREAMS_PER=22;
 function buildStreamlines(){
- const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=4;scene.add(group);
+ const group=new T.Group();group.name='AIR STREAMLINES';group.renderOrder=6;   /* after the glass pipes (5) so the saffron is not washed out */scene.add(group);
  for(const sec of pipeSections){
   const [branch]=sec.key.split(':'),mat=new T.ShaderMaterial({transparent:true,depthWrite:false,
    uniforms:{uPhase:{value:0},uAlpha:{value:0},uReach:{value:0},uLen:{value:1},uColor:{value:new T.Color('#FF671F')}},
@@ -268,8 +268,9 @@ function buildStreamlines(){
    group.add(new T.Line(g,mat))}
   // saffron (#FF671F, client) flow band inside the bore (as on screens 2 and 3): reads clearly on large displays where 1-px trails vanish
   const band=new T.ShaderMaterial({transparent:true,depthWrite:false,depthTest:false,uniforms:mat.uniforms,
-   vertexShader:'varying float vU;uniform float uLen;void main(){vU=uv.x*uLen;gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
-   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;void main(){if(vU/uLen>uReach)discard;float x=fract(vU/60.-uPhase*.35);float b=smoothstep(0.,.25,x)*(1.-smoothstep(.45,.75,x));vec3 deep=vec3(1.,.404,.122),hi=vec3(1.,.72,.42);float a=min(1.,uAlpha);if(a<.01)discard;gl_FragColor=vec4(mix(deep,hi,b*.75),a);}'});
+   vertexShader:'varying float vU;varying vec3 vN;uniform float uLen;void main(){vU=uv.x*uLen;vN=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.);}',
+   // client reference: a smooth glowing saffron tube - deeper orange-red at the edges, bright #FF671F body, a light line along the centre, thin streaks moving with the flow
+   fragmentShader:'uniform float uPhase;uniform float uAlpha;uniform float uReach;uniform float uLen;varying float vU;varying vec3 vN;void main(){if(vU/uLen>uReach)discard;float a=min(1.,uAlpha);if(a<.01)discard;float f=clamp(vN.z,0.,1.);vec3 c=mix(vec3(.82,.20,.04),vec3(1.,.404,.122),smoothstep(.05,.65,f));c=mix(c,vec3(1.,.86,.62),smoothstep(.86,.985,f)*.6);float x=fract(vU/85.-uPhase*.35);float s=smoothstep(0.,.05,x)*(1.-smoothstep(.08,.22,x));c=mix(c,vec3(1.,.78,.5),s*.3*f);gl_FragColor=vec4(c,a);}'});
   const curve=new T.CurvePath();for(let i=1;i<P.length;i++)if(P[i].distanceTo(P[i-1])>.01)curve.add(new T.LineCurve3(P[i-1],P[i]));
   if(curve.curves.length){const tube=new T.Mesh(new T.TubeGeometry(curve,Math.max(8,curve.curves.length*4),sec.rad*.92,12,false),band);tube.renderOrder=6;tube.frustumCulled=false;group.add(tube)}
   sec.branch=branch;sec.mat=mat;

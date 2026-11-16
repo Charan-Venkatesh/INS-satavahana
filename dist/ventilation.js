@@ -274,7 +274,7 @@ function pipeUpdate(p, dt, q, color, px, now) {
 // plumes: where air leaves the circuit (overboard past 58, TO COMPT louvre, galley discharge) a thick blue-white snowy
 // cloud pours out, narrow at the mouth, slowing and spreading as it mixes; strength follows the flow. Appearance only.
 const plumes = [];
-function plume(x, y, dx, dy, key) {
+function plume(x, y, dx, dy, key, intake = false) {
   const n = 560, pos = new Float32Array(n * 3), al = new Float32Array(n), sz = new Float32Array(n), geo = new T.BufferGeometry();
   geo.setAttribute('position', new T.BufferAttribute(pos, 3).setUsage(T.DynamicDrawUsage)); geo.setAttribute('aAlpha', new T.BufferAttribute(al, 1).setUsage(T.DynamicDrawUsage)); geo.setAttribute('aSize', new T.BufferAttribute(sz, 1).setUsage(T.DynamicDrawUsage));
   const m = new T.ShaderMaterial({ transparent: true, depthWrite: false, uniforms: { uScale: { value: 1 } },
@@ -282,7 +282,7 @@ function plume(x, y, dx, dy, key) {
     fragmentShader: 'varying float vA;void main(){float d=length(gl_PointCoord-.5)*2.;if(d>1.)discard;float a=pow(1.-d,1.8)*vA;if(a<.004)discard;gl_FragColor=vec4(mix(vec3(.42,.58,.66),vec3(.80,.89,.93),pow(1.-d,2.)),a);}' });
   const pts = new T.Points(geo, m); pts.frustumCulled = false; pts.renderOrder = 8; scene.add(pts);
   const parts = Array.from({ length: n }, () => ({ age: Math.random(), life: 1.6 + Math.random() * 1.2, live: false }));
-  plumes.push({ o: P(x, y, PIPE_Y + 6), d: new T.Vector3(dx, 0, dy).normalize(), key, pos, al, sz, geo, mat: m, pts, parts, level: 0 });
+  plumes.push({ o: P(x, y, PIPE_Y + 6), d: new T.Vector3(dx, 0, dy).normalize(), key, pos, al, sz, geo, mat: m, pts, parts, level: 0, intake });
 }
 function plumeUpdate(pl, dt, q) {
   pl.level += ((q > 1 ? Math.min(1, .75 + q / 700) : 0) - pl.level) * Math.min(1, dt * 2);
@@ -290,13 +290,14 @@ function plumeUpdate(pl, dt, q) {
   if (!pl.pts.visible) return;
   const side = new T.Vector3(-pl.d.z, 0, pl.d.x);
   for (let i = 0; i < pl.parts.length; i++) {
-    const p = pl.parts[i]; p.age += dt / p.life;
+    const p = pl.parts[i]; p.age += dt / p.life / (pl.intake ? 2.2 : 1);   // intake drifts in slowly
     if (p.age >= 1) { p.age %= 1; p.live = Math.random() < pl.level; p.sp = .75 + Math.random() * .5; p.sw = (Math.floor(Math.random() * 5) - 2) / 2 + (Math.random() - .5) * .12; p.up = Math.random(); p.ph = Math.random() * 6.28; }   // five jets
     if (!p.live) { pl.al[i] = 0; continue; }
-    const t = p.age, run = (1 - Math.pow(1 - t, 1.6)) * 230 * p.sp, spread = 10 + t * 60;   // fast at the mouth, slowing as it mixes
+    const t = pl.intake ? 1 - p.age : p.age;                                  // intake: same cloud run backwards, wide and far → narrow into the mouth
+    const run = (1 - Math.pow(1 - t, 1.6)) * (pl.intake ? 170 : 230) * p.sp, spread = (pl.intake ? 4 : 10) + t * (pl.intake ? 70 : 60);   // fast at the mouth, slowing as it mixes
     const q3 = pl.o.clone().addScaledVector(pl.d, run).addScaledVector(side, p.sw * spread + Math.sin(t * 5 + p.ph) * 2);
     pl.pos[i * 3] = q3.x; pl.pos[i * 3 + 1] = q3.y + p.up * 10; pl.pos[i * 3 + 2] = q3.z;
-    pl.sz[i] = 12 + t * 30; pl.al[i] = pl.level * .95 * Math.min(1, t / .06) * Math.pow(1 - t, 1.2);
+    pl.sz[i] = 12 + t * 30; pl.al[i] = pl.intake ? pl.level * .8 * Math.min(1, p.age / .15) * Math.min(1, t / .08) : pl.level * .95 * Math.min(1, t / .06) * Math.pow(1 - t, 1.2);
   }
   pl.geo.attributes.position.needsUpdate = pl.geo.attributes.aAlpha.needsUpdate = pl.geo.attributes.aSize.needsUpdate = true;
 }
@@ -674,6 +675,7 @@ blower('aiu', -230, 1330, 122, 'Air Induction Unit blower', tagged('ext', ([fx, 
 }));
 symText('M/R', -328, DUCT_Y - 40, 17); symText('E/R', 120, DUCT_Y + 40, 17); symText('E/R', 1880, DUCT_Y + 52, 17);
 symText('ENGINE ROOM', -150, 1640, 18); symText('AIR INDUCTION UNIT', -230, 1412, 13); symText('COOLER 806 4C', 40, 1470, 13);
+plume(-300, 1330, -1, 0, 'aiuQ', true);                                    // client: air being drawn into the AIU blower (Mode 4)
 TAG = null; symText('BATTERY PIT', 1000, 1180, 18); symText('III rd COMPARTMENT', 1000, 1500, 14);
 
 TAG = 'ext';
@@ -682,7 +684,7 @@ TAG = 'ext';
 // X → 125 → lower line: 124 (left end) · 126 (cracked) · Standard Blower 127 blowing left; 127 draws from the right,
 // from 128 and from the CO₂ air purification unit through 129. Mode 3: pit → 123 → 58 → 128 → 127 → 125 → overboard.
 for (const n of ['K1', 'K2', 'XJ', 'LJ', 'T6']) JUNCTIONS.add(n);
-Object.assign(FACE, { v124: 24, v125: 24, v126: 20, v128: 24, v129: 27, vexA: 27, vexB: 27 });
+Object.assign(FACE, { v124: 24, v125: 24, v126: 20, v128: 24, v129: 24, vexA: 24, vexB: 24 });
 const TOP = 360, OUT_Y = 250, LOW = 600, SUC = 700;
 pipe('v58', 'K1', f => f.m3 + f.exq, [[140, TOP], [40, TOP]], 'dirty');
 pipe('K1', 'vexA', 'exq', [[40, TOP], [-20, TOP]], 'dirty');
@@ -699,9 +701,9 @@ pipe('T6', 'v126', 'ex', [[-160, LOW], [-160, LOW + 55]], 'dirty');             
 pipe('LJ', 'v124', 'none', [[-260, LOW], [-320, LOW]], 'dirty');
 pipe('LJ', 'v125', 'm3', [[-260, LOW], [-260, 430]], 'dirty');
 pipe('v125', 'XJ', 'm3', [[-260, 430], [-260, OUT_Y]], 'dirty');
-gateValve('vexA', -20, TOP, 'Exhaust blower inlet valve', [], true);
-gateValve('vexB', -205, OUT_Y, 'Exhaust blower outlet valve', [], true);
-gateValve('v129', 120, SUC, 'Valve 129 (CO₂ unit)', [], true);
+valve('vexA', -20, TOP, false, 'Exhaust blower inlet valve', 'bottom');   // client: same valve style as 126
+valve('vexB', -205, OUT_Y, false, 'Exhaust blower outlet valve', 'top');
+valve('v129', 120, SUC, false, 'Valve 129 (CO₂ unit)', 'top');
 valve('v128', 40, 530, true, 'Valve 128', 'right');
 valve('v125', -260, 430, true, 'Valve 125', 'left');
 valve('v124', -320, LOW, false, 'Valve 124', 'top');

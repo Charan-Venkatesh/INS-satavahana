@@ -721,8 +721,6 @@ symText('EXHAUST BLOWER', -110, TOP + 70, 13); symText('STANDARD BLOWER 127', -6
 symText('FROM CARBON DIOXIDE', 118, SUC + 78, 11); symText('AIR PURIFICATION UNIT', 118, SUC + 96, 11);
 { const pts = [P(-370, 150, 2), P(205, 150, 2), P(205, 1665, 2), P(-370, 1665, 2), P(-370, 150, 2)];   // dashed engine-room boundary
   const l = new T.Line(new T.BufferGeometry().setFromPoints(pts), new T.LineDashedMaterial({ color: '#1d2327', dashSize: 14, gapSize: 9 })); l.computeLineDistances(); scene.add(l); }
-{ const g = new T.Group(); g.position.copy(P(-60, 1395, SYM_Y)); scene.add(g);             // ⊠ on the Air Induction Unit outlet
-  for (const [a, b, c, d] of [[-13, -13, 13, -13], [13, -13, 13, 13], [13, 13, -13, 13], [-13, 13, -13, -13], [-13, -13, 13, 13], [13, -13, -13, 13]]) symLine(g, a, b, c, d, 3); }
 TAG = 'base';                                            // normal view: 58 vents straight overboard, as before
 pipe('v58', 'overboard', 'draught', [[140, 360], [60, 360]], 'dirty'); plume(60, 360, -1, 0, 'draught'); arrow(30, 360, 'l', 'dirty', 'draught', 1);
 TAG = null;
@@ -759,7 +757,7 @@ function reach() {
   const st = document.createElement('style');
   st.textContent = `#vent-warning,#h2-alarm{position:absolute;left:50%;transform:translateX(-50%);z-index:20;padding:10px 18px;border-radius:10px;font:700 15px/1.3 system-ui;box-shadow:0 6px 24px #0008;pointer-events:none;transition:opacity .3s;max-width:90%;text-align:center;background:#1d2224ee}
 #vent-warning{top:18px;border:1.5px solid #e74c3c;color:#ff5a4d;opacity:0}#vent-warning.info{border-color:#22b45a;color:#bff5cf}
-#h2-alarm{bottom:14px;border:1.5px solid #ffb020;color:#ffd27a;display:none}#h2-alarm.red{border-color:#ff4a3d;color:#ff8c84}`;
+#h2-alarm{bottom:14px;border:1.5px solid #ffb020;color:#ffd27a;display:none!important}   /* client: H₂ warning banner removed */#h2-alarm.red{border-color:#ff4a3d;color:#ff8c84}`;
   document.head.append(st);
 }
 for (const p of parts.values()) {

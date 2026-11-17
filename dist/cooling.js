@@ -12,7 +12,12 @@ import {openBlowerDetail} from './blower-detail.js';
 import {loadPump, PUMP_REV_PER_S, PUMP_SPIN_UP_S, PUMP_COAST_S} from './pump-model.js';
 
 const host = document.querySelector('#viewport'), labelsRoot = document.querySelector('#labels'), circuit = document.querySelector('#circuit');
-const P = (x, y, h = 0) => new T.Vector3(x - 1000, h, y - 786);
+// client: fill the wide screen and give the crowded C/R plant room. Plan x is spread piecewise: M/R..III and F/E
+// a little, C/R (920-1435 on the drawing) much more. Parts keep their shape; only positions spread.
+const XA = 1.16, XB = 1.70, XC = 1.18, SX = 1.32;
+const WX = x => x <= 920 ? -105.6 + (x - 920) * XA : x <= 1435 ? -105.6 + (x - 920) * XB : -105.6 + 515 * XB + (x - 1435) * XC;
+const WXinv = w => w <= -105.6 ? 920 + (w + 105.6) / XA : w <= -105.6 + 515 * XB ? 920 + (w + 105.6) / XB : 1435 + (w + 105.6 - 515 * XB) / XC;
+const P = (x, y, h = 0) => new T.Vector3(WX(x), h, y - 786);
 const PIPE_Y = 24;
 const FILL_SPEED = 520;                                  // plan units / s at which pumped water fills a pipe up to the next closed part
 const LAMP_IDLE = new T.Color('#8e9ca3'),   // light backdrop: idle rings in grey so they still show
@@ -26,7 +31,7 @@ const renderer = new T.WebGLRenderer({ antialias: true });
 renderer.setPixelRatio(sharpRatio()); renderer.outputColorSpace = T.SRGBColorSpace;
 renderer.toneMapping = T.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
 host.append(renderer.domElement);
-const scene = new T.Scene(); scene.background = new T.Color('#e9eef0');
+const scene = new T.Scene(); scene.background = new T.Color('#dcebf4');
 const camera = new T.OrthographicCamera(-1000, 1000, 600, -600, 1, 8000);
 camera.position.set(0, 3000, 0); camera.up.set(0, 0, -1); camera.lookAt(0, 0, 0);
 {
@@ -42,7 +47,7 @@ const sun = new T.DirectionalLight('#ffffff', 1.6); sun.position.set(-600, 2000,
 function canvasTexture(size, draw) { const c = document.createElement('canvas'); c.width = c.height = size; draw(c.getContext('2d'), size); const t = new T.CanvasTexture(c); t.colorSpace = T.SRGBColorSpace; return t; }
 const glowTex = canvasTexture(128, (c, s) => { const g = c.createRadialGradient(s / 2, s / 2, 0, s / 2, s / 2, s / 2); g.addColorStop(0, 'rgba(255,255,255,1)'); g.addColorStop(.35, 'rgba(255,255,255,.45)'); g.addColorStop(1, 'rgba(255,255,255,0)'); c.fillStyle = g; c.fillRect(0, 0, s, s); });
 const flameTex = canvasTexture(128, (c, s) => { const g = c.createRadialGradient(s / 2, s * .62, 2, s / 2, s * .55, s * .45); g.addColorStop(0, 'rgba(255,250,215,1)'); g.addColorStop(.4, 'rgba(255,190,80,.9)'); g.addColorStop(1, 'rgba(255,90,20,0)'); c.fillStyle = g; c.beginPath(); c.moveTo(s / 2, s * .08); c.bezierCurveTo(s * .9, s * .5, s * .78, s * .95, s / 2, s * .95); c.bezierCurveTo(s * .22, s * .95, s * .1, s * .5, s / 2, s * .08); c.fill(); });
-const floorTex = canvasTexture(512, (c, s) => { const g = c.createRadialGradient(s / 2, s * .42, 10, s / 2, s / 2, s * .72); g.addColorStop(0, '#f6f8f9'); g.addColorStop(1, '#d9e1e5'); c.fillStyle = g; c.fillRect(0, 0, s, s); });
+const floorTex = canvasTexture(512, (c, s) => { const g = c.createRadialGradient(s / 2, s * .42, 10, s / 2, s / 2, s * .72); g.addColorStop(0, '#ffffff'); g.addColorStop(.45, '#eef6fb'); g.addColorStop(1, '#c4dbea'); c.fillStyle = g; c.fillRect(0, 0, s, s); });
 const sprite = (tex, color, scale, opacity = 1) => { const m = new T.Sprite(new T.SpriteMaterial({ map: tex, color, transparent: true, opacity, depthWrite: false, blending: T.AdditiveBlending })); m.scale.setScalar(scale); return m; };
 
 // ---------------------------------------------------------------- materials
@@ -52,7 +57,7 @@ const mat = {
   red: new T.MeshStandardMaterial({ color: '#c8322b', metalness: .3, roughness: .4 }),
   glass: new T.MeshPhysicalMaterial({ color: '#8fb3c6', metalness: 0, roughness: .06, transparent: true, opacity: .34, clearcoat: 1, clearcoatRoughness: .05, envMapIntensity: 1.6 }),   // writes depth: overlapping pipes show one glass surface, so joints blend
   flange: new T.MeshStandardMaterial({ color: '#9aa6ad', metalness: .8, roughness: .35 }),
-  pit: new T.MeshStandardMaterial({ color: '#cfdbe0', metalness: .1, roughness: .9 })
+  pit: new T.MeshStandardMaterial({ color: '#bfe8e2', metalness: .1, roughness: .9 })
 };
 
 
@@ -110,7 +115,7 @@ const fittedJunctions = new Set();
 function junction(name, at, r) { if (fittedJunctions.has(name)) return; fittedJunctions.add(name); const m = new T.Mesh(new T.SphereGeometry(r * .995, 24, 16), mat.glass); m.position.copy(at); m.renderOrder = 6; scene.add(m); }
 // shorten a plan polyline at either end so it stops at the face of the part it enters
 function trimEnds(pts, a, b) {
-  const q = pts.map(p => p.slice()), mv = (i, j, d) => { const [x0, y0] = q[i], [x1, y1] = q[j], L = Math.hypot(x1 - x0, y1 - y0); if (!d || !L) return; const t = Math.min(d, L - 1) / L; q[i][0] = x0 + (x1 - x0) * t; q[i][1] = y0 + (y1 - y0) * t; };
+  const q = pts.map(p => p.slice()), mv = (i, j, d) => { const [x0, y0] = q[i], [x1, y1] = q[j], L = Math.hypot(x1 - x0, y1 - y0); if (!d || !L) return; const sx = x0 <= 920 ? XA : x0 <= 1435 ? XB : XC, k = Math.hypot((x1 - x0) / L * sx, (y1 - y0) / L); d /= k;   /* faces are world sizes: convert to plan along this (spread) direction */ const t = Math.min(d, L - 1) / L; q[i][0] = x0 + (x1 - x0) * t; q[i][1] = y0 + (y1 - y0) * t; };
   mv(0, 1, a); mv(q.length - 1, q.length - 2, b); return q;
 }
 const chevronShape = new T.Shape([new T.Vector2(-9, -11), new T.Vector2(3, 0), new T.Vector2(-9, 11), new T.Vector2(-3, 0)]);
@@ -265,23 +270,28 @@ function lamp(group, r, y = 2) {
 function addPart(id, type, x, y, title, size, extra) { const p = { id, type, x, y, title, size, ...extra }; parts.set(id, p); return p; }
 const wireMat = new T.MeshStandardMaterial({ color: '#8d989f', metalness: .7, roughness: .4 });
 function wire(pts, r = 2.5) { const path = new T.CurvePath(); for (let i = 1; i < pts.length; i++) path.add(new T.LineCurve3(P(pts[i - 1][0], pts[i - 1][1], PIPE_Y - 4), P(pts[i][0], pts[i][1], PIPE_Y - 4))); scene.add(new T.Mesh(new T.TubeGeometry(path, pts.length * 4, r, 8, false), wireMat)); }
-function dial(x, y, kind = 'arrow') {
+function dial(x, y, kind = 'arrow') {                          // circuit 1's PG: metal rim, white face, ticks 0-4 kg/cm², value window, dark needle
   const c = document.createElement('canvas'); c.width = c.height = 256; const tex = new T.CanvasTexture(c); tex.colorSpace = T.SRGBColorSpace; tex.anisotropy = renderer.capabilities.getMaxAnisotropy();
-  const top = new T.MeshBasicMaterial({ map: tex }), side = new T.MeshStandardMaterial({ color: '#c9d2d7', metalness: .7, roughness: .3 });
-  const m = new T.Mesh(new T.CylinderGeometry(20, 20, 8, 32), [side, top, side]); m.position.copy(P(x, y, PIPE_Y)); scene.add(m);
+  const top = new T.MeshBasicMaterial({ map: tex, toneMapped: false }), side = new T.MeshStandardMaterial({ color: '#e9eef1', metalness: .95, roughness: .14 });   // bright white face, polished chrome case (as circuit 1)
+  const m = new T.Mesh(new T.CylinderGeometry(27, 27, 10, 64), [side, top, side]); m.position.copy(P(x, y, PIPE_Y + 6)); scene.add(m);
+  const rim = new T.Mesh(new T.TorusGeometry(27, 3.4, 16, 64), side); rim.rotation.x = Math.PI / 2; rim.position.copy(P(x, y, PIPE_Y + 11)); scene.add(rim);
+  const glass = new T.Mesh(new T.CircleGeometry(26, 48), new T.MeshPhysicalMaterial({ color: '#ffffff', transparent: true, opacity: .12, roughness: 0, clearcoat: 1, depthWrite: false })); glass.rotation.x = -Math.PI / 2; glass.position.copy(P(x, y, PIPE_Y + 12)); scene.add(glass);
   let shown = null;
   return v => {
-    const r = Math.round(v); if (r === shown) return; shown = r; const g = c.getContext('2d');
-    g.fillStyle = '#ffffff'; g.beginPath(); g.arc(128, 128, 120, 0, 7); g.fill(); g.strokeStyle = '#1d2327'; g.lineWidth = 16; g.stroke();
-    g.fillStyle = g.strokeStyle = '#1d2327';
-    if (kind === 'V') { g.save(); g.translate(128, 128); g.rotate(-Math.PI / 2); g.font = 'bold 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('V', 0, 12); g.restore(); }   // the cylinder cap maps the canvas turned a quarter, so draw the V turned back
-    else {                                                                            // ↗ arrow across the face, swinging with temperature
-      const a = -Math.PI * (.85 - .7 * Math.min(1, Math.max(0, (v - 20) / 200))), dx = Math.cos(a), dy = Math.sin(a);
-      const x0 = 128 - dx * 72, y0 = 128 - dy * 72, x1 = 128 + dx * 78, y1 = 128 + dy * 78;
-      g.lineWidth = 12; g.beginPath(); g.moveTo(x0, y0); g.lineTo(x1 - dx * 20, y1 - dy * 20); g.stroke();
-      g.beginPath(); g.moveTo(x1, y1); g.lineTo(x1 - dx * 40 - dy * 22, y1 - dy * 40 + dx * 22); g.lineTo(x1 - dx * 40 + dy * 22, y1 - dy * 40 - dx * 22); g.closePath(); g.fill();
-    }
-    tex.needsUpdate = true;
+    const r = Math.round(v * 100); if (r === shown) return; shown = r; const g = c.getContext('2d');
+    g.clearRect(0, 0, 256, 256); g.save(); g.translate(128, 128); g.rotate(Math.PI / 2);   // the cylinder cap maps the canvas turned a quarter
+    g.fillStyle = '#f8fbf5'; g.beginPath(); g.arc(0, 0, 126, 0, 7); g.fill(); g.strokeStyle = '#1f3a33'; g.lineWidth = 5; g.beginPath(); g.arc(0, 0, 121, 0, 7); g.stroke();
+    if (kind === 'V') { g.fillStyle = '#1f3a33'; g.font = 'bold 150px Georgia, serif'; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText('V', 0, 12); g.restore(); tex.needsUpdate = true; return; }
+    g.fillStyle = g.strokeStyle = '#1f3a33'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    for (let k = 0; k <= 16; k++) { const a = (135 + k * 16.875) * Math.PI / 180, r1 = k % 4 ? 100 : 92; g.lineWidth = k % 4 ? 2.6 : 4.4; g.beginPath(); g.moveTo(Math.cos(a) * 112, Math.sin(a) * 112); g.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); g.stroke();
+      if (k % 2 === 0) { g.font = 'bold 19px Arial'; g.fillText((k / 4).toFixed(k % 4 ? 1 : 0), Math.cos(a) * 76, Math.sin(a) * 76); } }
+    g.font = 'bold 17px Arial'; g.fillText('kg/cm²', 0, 34);
+    g.fillStyle = '#f4f7f6'; g.lineWidth = 2; g.beginPath(); g.roundRect(-40, 52, 80, 30, 6); g.fill(); g.stroke();
+    g.fillStyle = '#14302a'; g.font = 'bold 21px Arial'; g.fillText(v.toFixed(2), 0, 68);
+    const a = (135 + Math.min(4, Math.max(0, v)) / 4 * 270) * Math.PI / 180;
+    g.strokeStyle = '#1f3a33'; g.lineWidth = 6; g.lineCap = 'round'; g.beginPath(); g.moveTo(-Math.cos(a) * 18, -Math.sin(a) * 18); g.lineTo(Math.cos(a) * 96, Math.sin(a) * 96); g.stroke();
+    g.beginPath(); g.arc(0, 0, 11, 0, 7); g.fill();
+    g.restore(); tex.needsUpdate = true;
   };
 }
 
@@ -299,11 +309,11 @@ function handwheel(g, s, lean = .55) {                       // stem leaning tow
   return wheel;
 }
 // gate valve ⋈ (two cones point to point along the pipe) — with check: true the schematic's half-black stop-check valve
-function gate(id, x, y, title, { vertical = false, s = .6, check = false } = {}) {
+function gate(id, x, y, title, { vertical = false, s = .6, check = false, down = false } = {}) {
   const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); if (vertical) g.rotation.y = Math.PI / 2; scene.add(g);
   const body = stateBody();
   for (const sgn of [-1, 1]) {
-    const c = new T.Mesh(new T.ConeGeometry(22 * s, 26 * s, 32, 1, true), check && sgn > 0 ? BLACK : body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13 * s; g.add(c);
+    const c = new T.Mesh(new T.ConeGeometry(22 * s, 26 * s, 32, 1, true), check && (down ? sgn < 0 : sgn > 0) ? BLACK : body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13 * s; g.add(c);
     const rim = new T.Mesh(new T.TorusGeometry(22 * s, 1.6 * s, 8, 32), RIM); rim.rotation.y = Math.PI / 2; rim.position.x = sgn * 26 * s; g.add(rim);
   }
   const wheel = handwheel(g, s);
@@ -331,9 +341,15 @@ function needle(x, y, vertical) {
 }
 // pressure gauge on its tapping: instrument line from the pipe, needle valve, then the dial (arrow swings with pressure)
 const gauges = [];
-function gauge(line, dialAt, pipeKey) {
+function gauge(line, dialAt, pipeKey, tag = '') {
   wire([...line, dialAt]); const n = line[line.length - 1], m = line[line.length - 2];
-  needle(n[0], n[1], Math.abs(n[0] - m[0]) < 1); gauges.push({ set: dial(dialAt[0], dialAt[1]), pipeKey });
+  needle(n[0], n[1], Math.abs(n[0] - m[0]) < 1);
+  { const d = new T.Vector3(WX(n[0]) - WX(dialAt[0]), 0, n[1] - dialAt[1]).normalize(), base = P(dialAt[0], dialAt[1], PIPE_Y + 4), q = new T.Quaternion().setFromUnitVectors(UP, d);
+    const brass = new T.MeshStandardMaterial({ color: '#c9a24a', metalness: .9, roughness: .3 });
+    const stem = new T.Mesh(new T.CylinderGeometry(4.2, 4.2, 14, 16), brass); stem.quaternion.copy(q); stem.position.copy(base).addScaledVector(d, 33); scene.add(stem);
+    const nut = new T.Mesh(new T.CylinderGeometry(6.4, 6.4, 6, 6), brass); nut.quaternion.copy(q); nut.position.copy(base).addScaledVector(d, 42); scene.add(nut); }
+  const nom = /^v8[34]$/.test(pipeKey) ? 3.2 : pipeKey === 'v47' ? 2.8 : pipeKey === 'ix' ? 1.4 : /^(ma1|mb1|ep1|es1|b3i|bfi)$/.test(pipeKey) ? 2.6 : 1.8;   // kg/cm²: pump discharge highest, panel outlets lowest
+  gauges.push({ set: dial(dialAt[0], dialAt[1]), pipeKey, at: dialAt, nom, p: 0, tag });
 }
 // thermocouple t / pressure sensor P: the schematic's boxed dark triangle beside the pipe
 function sensor(x, y, side = 1, letter = 't') {
@@ -344,17 +360,20 @@ function sensor(x, y, side = 1, letter = 't') {
   const b = new T.Mesh(new T.CylinderGeometry(3, 3, 10, 10), STEM); b.rotation.z = Math.PI / 2; b.position.x = -side * 10; g.add(b);
 }
 // flexible joint ~ : three bellows rings on the pipe
-function flex(x, y, vertical, r = 7) { for (const o of [-5, 0, 5]) { const m = new T.Mesh(new T.TorusGeometry(r + 1.5, 1.6, 8, 24), STEM); m.position.copy(P(x + (vertical ? 0 : o), y + (vertical ? o : 0), PIPE_Y)); m.rotation.y = vertical ? 0 : Math.PI / 2; scene.add(m); } }
+function flex(x, y, vertical, r = 7) {                     // wavy hose ~ as drawn
+  const pts = []; for (let i = 0; i <= 40; i++) { const t = i / 40, a = (t - .5) * 34, w = Math.sin(t * Math.PI * 2) * (r * .75); pts.push(P(x + (vertical ? w : a), y + (vertical ? a : w), PIPE_Y + r + 3)); }
+  scene.add(new T.Mesh(new T.TubeGeometry(new T.CatmullRomCurve3(pts), 60, 2.4, 8, false), new T.MeshStandardMaterial({ color: '#2b3338', metalness: .4, roughness: .45 }))); }
 // diamonds as drawn: cooler ◇ with a cross, panel cooler / ion-exchange filter ◇ with a dashed line; tinted by state
-function diamond3(x, y, kind, size = 44) {
+function diamond3(x, y, kind, size = 44, tall = 1.55) {
   const top = canvasTexture(128, (c, s) => {
     c.fillStyle = '#ffffff'; c.fillRect(0, 0, s, s); c.strokeStyle = '#1d2327'; c.lineWidth = 5;
-    if (kind === 'cooler') { c.beginPath(); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.stroke(); }
+    if (kind === 'cooler') { c.beginPath(); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.stroke(); }
+    else if (kind === 'cross') { c.beginPath(); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.stroke(); }
     else { c.setLineDash([12, 10]); c.beginPath(); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.stroke(); }
   });
   const side = new T.MeshStandardMaterial({ color: '#46525a', metalness: .4, roughness: .45 }), face = new T.MeshStandardMaterial({ map: top, roughness: .5 });
   const b = new T.Mesh(new T.BoxGeometry(size, 26, size), [side, side, face, side, side, side]);
-  b.rotation.y = Math.PI / 4; b.position.copy(P(x, y, PIPE_Y)); scene.add(b);
+  b.rotation.y = Math.PI / 4; const holder = new T.Group(); holder.position.copy(P(x, y, PIPE_Y)); holder.scale.z = tall; holder.add(b); scene.add(holder);
   return { side, face, col: LAMP_IDLE.clone() };
 }
 // battery breaker cooler: two glass columns (with their floats) either side of a cross-diamond exchanger
@@ -365,11 +384,11 @@ function exchanger(x, y) {
     for (const e of [-1, 1]) { const cap = new T.Mesh(new T.CylinderGeometry(11.5, 11.5, 5, 24), steel); cap.rotation.x = Math.PI / 2; cap.position.copy(P(x + dx, y + e * 70, PIPE_Y)); scene.add(cap); }
     const fl = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-8, -7), new T.Vector2(8, -7), new T.Vector2(0, 8)])), BLACK); fl.rotation.x = -Math.PI / 2; fl.position.copy(P(x + dx, y + 58, PIPE_Y + 12)); scene.add(fl);
   }
-  return diamond3(x, y, 'cooler', 34);
+  return diamond3(x, y, 'cross', 34);
 }
 
 // ---------------------------------------------------------------- compartments and battery pits
-{ const f = new T.Mesh(new T.PlaneGeometry(2800, 2000), new T.MeshBasicMaterial({ map: floorTex })); f.rotation.x = -Math.PI / 2; f.position.y = -700; scene.add(f); }
+{ const f = new T.Mesh(new T.PlaneGeometry(2800 * SX, 2000), new T.MeshBasicMaterial({ map: floorTex, toneMapped: false })); f.rotation.x = -Math.PI / 2; f.position.y = -700; scene.add(f); }
 for (const x of [380, 578, 920, 1435]) {                   // M/R | E/R | III | C/R | F/E
   const d = new T.Line(new T.BufferGeometry().setFromPoints([P(x, 345, -18), P(x, 1465, -18)]), new T.LineDashedMaterial({ color: '#7d94a0', dashSize: 16, gapSize: 12 })); d.computeLineDistances(); scene.add(d);
 }
@@ -377,7 +396,7 @@ const batteries = [], PITS = { III: { x0: 652, x1: 843, y0: 1176, y1: 1367, cell
 for (const [name, pit] of Object.entries(PITS)) {
   const w = pit.x1 - pit.x0, h = pit.y1 - pit.y0, c = P((pit.x0 + pit.x1) / 2, (pit.y0 + pit.y1) / 2, -20);
   const floor = new T.Mesh(new T.PlaneGeometry(w, h), mat.pit); floor.rotation.x = -Math.PI / 2; floor.position.copy(c); scene.add(floor);
-  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(w, h)), new T.LineBasicMaterial({ color: '#5d6b72' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(c).setY(-19); scene.add(edge);
+  const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(w, h)), new T.LineBasicMaterial({ color: '#2a9d8f' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(c).setY(-19); scene.add(edge);
   for (const x of pit.cells) {
     const b = battery3D({}), sc = 20, q = facing(new T.Vector3(0, 0, -1), new T.Vector3(0, 1, 0));
     b.group.scale.setScalar(sc); b.group.quaternion.copy(q);
@@ -406,7 +425,7 @@ function pump(id, cx, cy, mirror, title, connect) {
     model.traverse(n => { if (/top_?bridge/i.test(n.name)) n.visible = false; });   // open lantern: the spinning coupling shows from above
     p.base = g.position.clone();
     const glow = sprite(glowTex, '#22b45a', 1, 0); glow.material.blending = T.NormalBlending; glow.scale.set(150, 90, 1); glow.position.copy(P(cx, cy, 0)); scene.add(glow); p.runGlow = glow;
-    const plan = name => { const v = model.getObjectByName(name).getWorldPosition(new T.Vector3()); return [v.x + 1000, v.z + 786, v.y]; };
+    const plan = name => { const v = model.getObjectByName(name).getWorldPosition(new T.Vector3()); return [WXinv(v.x), v.z + 786, v.y]; };
     connect(plan('Suction_Port'), plan('Discharge_Port'));
     layout();
   });
@@ -422,14 +441,14 @@ gv('v50', 1225, UPL, 'Valve 50 · cooler outlet'); gv('v54', 1330, UPL, 'Valve 5
 gv('v46', 1180, 380, 'Valve 46 · cooler bypass', { s: .8 });
 gv('v41', 1108, LOW, 'Valve 41 · supply to III, E/R, M/R'); gv('v49', 1232, LOW, 'Valve 49 · supply to F/E');
 // M/R: main motor panel (A) and grouper switch (B); E/R: Port and Stbd panels
-cv('ma1', 222, 617, 'Main motor panel · inlet valve', { vertical: true, s: .48 }); cv('ma2', 222, 1150, 'Main motor panel · outlet valve', { vertical: true, s: .48 });
-cv('mb1', 307, 617, 'Grouper switch · inlet valve', { vertical: true, s: .48 }); cv('mb2', 307, 1140, 'Grouper switch · outlet valve', { vertical: true, s: .48 });
-cv('ep1', 405, 660, 'Port panel · inlet valve', { vertical: true, s: .48 }); cv('ep2', 405, 1180, 'Port panel · outlet valve', { vertical: true, s: .48 });
-cv('es1', 512, 660, 'Stbd panel · inlet valve', { vertical: true, s: .48 }); cv('es2', 512, 1180, 'Stbd panel · outlet valve', { vertical: true, s: .48 });
+cv('ma1', 222, 617, 'Main motor panel · inlet valve', { vertical: true, down: true, s: .48 }); cv('ma2', 222, 1150, 'Main motor panel · outlet valve', { vertical: true, down: true, s: .48 });
+cv('mb1', 307, 617, 'Grouper switch · inlet valve', { vertical: true, down: true, s: .48 }); cv('mb2', 307, 1140, 'Grouper switch · outlet valve', { vertical: true, down: true, s: .48 });
+cv('ep1', 405, 660, 'Port panel · inlet valve', { vertical: true, down: true, s: .48 }); cv('ep2', 405, 1180, 'Port panel · outlet valve', { vertical: true, down: true, s: .48 });
+cv('es1', 512, 660, 'Stbd panel · inlet valve', { vertical: true, down: true, s: .48 }); cv('es2', 512, 1180, 'Stbd panel · outlet valve', { vertical: true, down: true, s: .48 });
 // III and F/E: battery breaker coolers and battery pits
-cv('b3i', 856, 836, 'III battery breaker · inlet valve', { vertical: true, s: .48 }); cv('b3o', 634, 923, 'III battery breaker · outlet valve', { vertical: true, s: .48 });
+cv('b3i', 856, 836, 'III battery breaker · inlet valve', { vertical: true, down: true, s: .48 }); cv('b3o', 634, 923, 'III battery breaker · outlet valve', { vertical: true, s: .48 });
 gv('v17', 900, 800, 'Valve 17 · III battery pit inlet', { vertical: true, s: .55 }); gv('v26', 600, 678, 'Valve 26 · III battery pit outlet', { vertical: true, s: .55 });
-cv('bfi', 1476, 884, 'F/E battery breaker · inlet valve', { vertical: true, s: .48 }); cv('v60', 1697, 815, 'Valve 60 · F/E battery breaker outlet', { vertical: true, s: .48 });
+cv('bfi', 1476, 884, 'F/E battery breaker · inlet valve', { vertical: true, down: true, s: .48 }); cv('v60', 1697, 815, 'Valve 60 · F/E battery breaker outlet', { vertical: true, s: .48 });
 gv('v56', 1438, 710, 'Valve 56 · F/E battery pit inlet', { vertical: true, s: .55 }); gv('vfp', 1738, 920, 'F/E battery pit outlet valve', { vertical: true, s: .55 });
 // pump suction / discharge
 gv('v81', 1258, 990, 'Valve 81 · pump 5/17 suction', { s: .5 });
@@ -439,21 +458,21 @@ cv('v84', D1, 770, 'Valve 84 · pump 40/15 discharge', { vertical: true, s: .48 
 angleValve('v39', 1067, 662, 'Valve 39 · salinometer and ion-exchange supply', [1, 0], [0, 1]);
 angleValve('v36', 1015, 955, 'Valve 36 · salinometer', [1, 0], [0, -1]); angleValve('v34', 972, 845, 'Valve 34 · salinometer from ion-exchange filter', [0, 1], [1, 0]);
 angleValve('v98', 938, 1110, 'Valve 98 · ion-exchange filter bypass', [0, -1], [1, 0]); angleValve('v91', 1110, 1145, 'Valve 91 · salinometer return', [0, -1], [1, 0]);
-cv('v92', 1067, 1190, 'Valve 92 · drain line', { vertical: true, s: .42 }); angleValve('v89', 1100, 1262, 'Valve 89 · drain', [-1, 0], [0, 1], .4);
+cv('v92', 1067, 1190, 'Valve 92 · drain line', { vertical: true, down: true, s: .42 }); angleValve('v89', 1100, 1262, 'Valve 89 · drain', [-1, 0], [0, 1], .4);
 angleValve('v47', 1198, 575, 'Valve 47 · blowing connection', [0, -1], [1, 0], .4); angleValve('v53', 1298, 575, 'Valve 53 · for blowing', [-1, 0], [0, 1], .4);
 gv('v51', 1272, 610, 'Valve 51 · drain', { vertical: true, s: .38 });
-angleValve('v116', 192, 1090, 'Valve 116 · drain', [1, 0], [0, 1], .4);
+gv('v116', 192, 1106, 'Valve 116 · drain', { vertical: true, s: .34 });
 angleValve('v76', 1385, 1045, 'Valve 76 · expansion tank', [0, -1], [-1, 0], .4); angleValve('v77', 1395, 1100, 'Valve 77 · drain', [-1, 0], [0, 1], .4);
 
 for (const p of parts.values()) if (p.face) FACE[p.id] = p.face;
 
 // ---------------------------------------------------------------- equipment
 const DIAMONDS = {
-  ca: diamond3(1060, UPL, 'cooler', 50), cb: diamond3(1280, UPL, 'cooler', 50),
+  ca: diamond3(1060, UPL, 'cooler', 50, 1.35), cb: diamond3(1280, UPL, 'cooler', 50, 1.35),
   mca: diamond3(222, 830, 'panel', 42), mcb: diamond3(307, 830, 'panel', 42), ecp: diamond3(405, 900, 'panel', 42), ecs: diamond3(512, 900, 'panel', 42),
   hx3: exchanger(745, 975), hxf: exchanger(1568, 950), ix: diamond3(1002, 1110, 'panel', 40)
 };
-for (const k in DIAMONDS) FACE_OF[k] = { ca: 30, cb: 30, hx3: 34, hxf: 34, ix: 26 }[k] || 26;
+for (const k in DIAMONDS) FACE_OF[k] = { ca: 30, cb: 30, hx3: 34, hxf: 34, ix: 26 }[k] || 40;   // panel diamonds are tall: vertical pipes stop at their tips
 { // expansion tank: glass tank with its water and the level indicator L
   const g = P(1401, 673, PIPE_Y);
   const shell = new T.Mesh(new T.BoxGeometry(58, 50, 125), new T.MeshPhysicalMaterial({ color: '#c9dde2', roughness: .05, transparent: true, opacity: .35, clearcoat: 1, depthWrite: false })); shell.position.copy(g); shell.renderOrder = 6; scene.add(shell);
@@ -472,14 +491,20 @@ for (const k in DIAMONDS) FACE_OF[k] = { ca: 30, cb: 30, hx3: 34, hxf: 34, ix: 2
 
 // ---------------------------------------------------------------- pipes (in the direction the water moves)
 const RM = 12, RB = 9, RS = 5.5;                              // same bores as screen 2's pipes, so the flow reads the same
-const hump = (x) => [[x - 20, LOW], [x - 9, LOW, PIPE_Y + 24], [x + 9, LOW, PIPE_Y + 24], [x + 20, LOW]];   // ⌒ where the lower line crosses a riser
+const hump = (x) => [[x - 21, LOW], [x - 15, LOW - 20, PIPE_Y + 30], [x, LOW - 28, PIPE_Y + 34], [x + 15, LOW - 20, PIPE_Y + 30], [x + 21, LOW]];   // ⌒ bridging one riser (risers 552 / 600 are close)   // ⌒ as drawn
+const under = (x) => [[x - 18, LOW], [x - 8, LOW, PIPE_Y - 28], [x + 8, LOW, PIPE_Y - 28], [x + 18, LOW]];   // ⌒ where the lower line crosses a riser
 // supply: pump discharge → lower line → branches
 pipe('DH0', 'DH', 'cold', [[1148, 728], [1148, 662]], 'cold', { r: RM });
 pipe('DH', 'LJ', 'cold', [[1148, 662], [1148, LOW]], 'cold', { r: RM });
 pipe('LJ', 'v41', 'cold', [[1148, LOW], [1108, LOW]], 'cold', { r: RM });
 pipe('v41', 'L1', 'cold', [[1108, LOW], [900, LOW]], 'cold', { r: RM });
-pipe('L1', 'LE', 'cold', [[900, LOW], ...hump(600), ...hump(552), [457, LOW]], 'cold', { r: RM });
-pipe('LE', 'LM', 'cold', [[457, LOW], ...hump(357), [265, LOW]], 'cold', { r: RM });
+// where the supply line crosses the E/R and III risers it hops over each one in a flanged ⌒ bridge, as drawn
+const hopArc = (x0, x1) => { const c = (x0 + x1) / 2, R = Math.abs(x0 - x1) / 2, pts = []; for (let i = 0; i <= 10; i++) { const a = Math.PI * i / 10; pts.push([c + R * Math.cos(a) * Math.sign(x0 - x1), LOW - R * 1.1 * Math.sin(a), PIPE_Y + 34 * Math.sin(a)]); } return pts; };
+pipe('L1', 'HA', 'cold', [[900, LOW], [624, LOW]], 'cold', { r: RM });
+pipe('HA', 'HB', 'cold', hopArc(624, 577), 'cold', { r: RB });
+pipe('HB', 'HC', 'cold', hopArc(577, 528), 'cold', { r: RB });
+pipe('HC', 'LE', 'cold', [[528, LOW], [457, LOW]], 'cold', { r: RM });
+pipe('LE', 'LM', 'cold', [[457, LOW], ...under(357), [265, LOW]], 'cold', { r: RM });
 pipe('LJ', 'BW', 'cold', [[1148, LOW], [1198, LOW]], 'cold', { r: RM });
 pipe('BW', 'v49', 'cold', [[1198, LOW], [1232, LOW]], 'cold', { r: RM });
 pipe('v49', 'LF', 'cold', [[1232, LOW], [1438, LOW]], 'cold', { r: RM });
@@ -495,8 +520,8 @@ pipe('mcb', 'mb2', 'warm', [[307, 830], [307, 1140]], 'warm', { r: RB });
 pipe('ma2', 'MB', 'warm', [[222, 1150], [222, 1207], [265, 1207]], 'warm', { r: RB });
 pipe('mb2', 'MB', 'warm', [[307, 1140], [307, 1207], [265, 1207]], 'warm', { r: RB });
 pipe('MB', 'UM', 'warm', [[265, 1207], [265, 1247], [357, 1247], [357, UPL]], 'warm', { r: RB });
-pipe('MA3', 'v116', 'warm', [[222, 1090], [192, 1090]], 'warm', { r: RS });
-pipe('v116', 'out116', 'warm', [[192, 1090], [192, 1128]], 'warm', { r: RS });
+pipe('MA3', 'v116', 'warm', [[222, 1090], [192, 1090], [192, 1106]], 'warm', { r: RS });
+pipe('v116', 'out116', 'warm', [[192, 1106], [192, 1128]], 'warm', { r: RS });
 // E/R panels
 pipe('LE', 'ET', 'cold', [[457, LOW], [457, 580]], 'cold', { r: RB });
 pipe('ET', 'ep1', 'cold', [[457, 580], [405, 580], [405, 660]], 'cold', { r: RB });
@@ -582,7 +607,7 @@ pipe('PFo', 'vfp', 'warm', [[1712, 1370], [1738, 1370], [1738, 920]], 'warm', { 
 pipe('vfp', 'JF', 'warm', [[1738, 920], [1738, 729], [1697, 729]], 'warm', { r: RB });
 // each cell on its cooling coil by a clear hose, as the cells are piped on screens 1 and 2
 for (const c of batteries) {
-  const coil = c.pit === 'III' ? coil3 : coilF, yc = c.pit === 'III' ? 1215 : 1318, N = c.nip, S = P(N.x + 1000, yc, PIPE_Y);
+  const coil = c.pit === 'III' ? coil3 : coilF, yc = c.pit === 'III' ? 1215 : 1318, N = c.nip, S = P(WXinv(N.x), yc, PIPE_Y);
   const h = pipe('coil', 'cell', 'cold', null, 'cold', { r: 3.4, curve: new T.CatmullRomCurve3([S, S.clone().add(new T.Vector3(0, 20, 8)), S.clone().lerp(N, .5).add(new T.Vector3(0, 30, 0)), N.clone().addScaledVector(c.up, 30), N.clone().addScaledVector(c.up, 4), N.clone()]) });
   h.follow = coil;
 }
@@ -597,20 +622,26 @@ pump('p2', 1275, 860, false, 'Pump 5/17', ([sx, sy, sh], [dx, dy, dh]) => {
 });
 
 // ---------------------------------------------------------------- instruments (schematic positions)
-for (const [x, y, side] of [[222, 920, 1], [307, 925, -1], [405, 1000, 1], [512, 1000, -1], [600, 1125, 1], [1738, 1265, -1], [1148, 615, -1]]) sensor(x, y, side);
+for (const [x, y, side] of [[222, 920, 1], [307, 925, -1], [405, 1000, 1], [512, 1000, -1], [600, 1125, 1], [1738, 1160, -1], [1148, 615, -1]]) sensor(x, y, side);
 sensor(1148, 705, -1, 'P');
 flex(685, 975, false); flex(815, 975, false); flex(1510, 950, false); flex(1640, 950, false); flex(1158, 1065, true, RM); flex(1083, 1262, false, RS);
 gauge([[222, 735], [185, 735], [185, 700]], [185, 655], 'ma1'); gauge([[222, 1040], [185, 1040], [185, 1015]], [185, 975], 'mca');
 gauge([[307, 740], [265, 740], [265, 700]], [265, 655], 'mb1'); gauge([[307, 1080], [265, 1080], [265, 1035]], [265, 990], 'mcb');
-gauge([[405, 870], [452, 870], [452, 835]], [452, 790], 'ep1'); gauge([[405, 1015], [452, 1015], [452, 1055]], [452, 1095], 'ecp');
-gauge([[512, 810], [470, 810], [470, 765]], [470, 720], 'es1'); gauge([[512, 1100], [465, 1100], [465, 1070]], [465, 1035], 'ecs');
+gauge([[405, 860], [437, 860], [437, 830]], [437, 790], 'ep1'); gauge([[405, 1020], [440, 1020], [440, 1075]], [440, 1110], 'ecp');
+gauge([[512, 790], [480, 790], [480, 760]], [480, 718], 'es1'); gauge([[512, 1100], [478, 1100], [478, 1082]], [478, 1050], 'ecs');
 gauge([[722, 905], [722, 880], [710, 880]], [683, 880], 'b3i'); gauge([[768, 905], [768, 880], [790, 880]], [825, 880], 'b3i');
 gauge([[722, 1045], [722, 1060], [700, 1060]], [668, 1060], 'hx3'); gauge([[768, 1045], [768, 1060], [800, 1060]], [835, 1060], 'hx3');
 gauge([[1545, 880], [1545, 862], [1525, 862]], [1500, 862], 'bfi'); gauge([[1591, 880], [1591, 862], [1612, 862]], [1638, 862], 'bfi');
 gauge([[1545, 1020], [1545, 1045], [1525, 1045]], [1495, 1045], 'hxf'); gauge([[1591, 1020], [1591, 1045], [1615, 1045]], [1648, 1045], 'hxf');
-gauge([[D1, 800], [1128, 800], [1128, 830]], [1090, 830], 'v84'); gauge([[D2, 820], [1310, 820], [1310, 860]], [1335, 905], 'v83');
-gauge([[1228, 575], [1228, 600]], [1228, 628], 'v47'); gauge([[1033, 1110], [1033, 1180]], [1033, 1238], 'ix'); gauge([[972, 1150], [972, 1185]], [968, 1240], 'ix');
+gauge([[D1, 800], [1128, 800], [1128, 830]], [1090, 830], 'v84', 'PG'); gauge([[D2, 820], [1310, 820], [1310, 860]], [1335, 905], 'v83');
+gauge([[1228, 575], [1228, 600]], [1228, 628], 'v47'); gauge([[1033, 1112], [1033, 1180]], [1036, 1232], 'ix', 'PG '); gauge([[972, 1112], [972, 1180]], [968, 1232], 'ix', 'PG ');   // both from the filter's inlet / outlet, as drawn (compact value tags)   // both from the filter's inlet / outlet, as drawn
 
+const ARROW_MAT = new T.MeshBasicMaterial({ color: '#0f3550', toneMapped: false });
+function darrow(x, y, dir) { const m = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-9, -12), new T.Vector2(6, 0), new T.Vector2(-9, 12), new T.Vector2(-4, 0)])), ARROW_MAT);
+  m.rotation.order = 'YXZ'; m.rotation.set(-Math.PI / 2, { r: 0, l: Math.PI, u: Math.PI / 2, d: -Math.PI / 2 }[dir], 0); m.position.copy(P(x, y, PIPE_Y + 18)); m.renderOrder = 9; scene.add(m); }
+for (const [x, y, d] of [[700, UPL, 'r'], [715, LOW, 'l'], [1550, UPL, 'l'], [1405, LOW, 'r'], [600, 1185, 'u'], [634, 780, 'u'], [900, 950, 'd'], [856, 760, 'd'], [1170, 490, 'd'], [1148, 590, 'u'],
+  [1438, 930, 'd'], [1476, 730, 'd'], [1045, 800, 'd'], [972, 940, 'u'], [1015, 800, 'u'], [1030, 1028, 'r'], [1045, 1110, 'l'], [1415, 1060, 'd'], [1697, 600, 'u'], [1738, 1100, 'u']]) darrow(x, y, d);
+{ const f = new T.LineLoop(new T.BufferGeometry().setFromPoints([P(140, 338, -18), P(1792, 338, -18), P(1792, 1478, -18), P(140, 1478, -18)]), new T.LineBasicMaterial({ color: '#2d4f66' })); scene.add(f); }
 // ---------------------------------------------------------------- state and the water network
 const valveIds = [...parts.values()].filter(p => p.type === 'valve').map(p => p.id);
 const initial = () => ({ running: false, open: Object.fromEntries(valveIds.map(k => [k, false])), on: { p1: false, p2: false }, set: { p1: 1, p2: 1 } });
@@ -638,6 +669,17 @@ const flowsAt = n => pipes.some(p => (p.from === n || p.to === n) && p.flow);
 const DRAINS = [['out116', 192, 1128], ['out89', 1100, 1296], ['out77', 1395, 1132], ['out53', 1298, 606], ['out51', 1272, 640]];
 for (const [n, x, y] of DRAINS) plume(x, y, 0, 1, () => pipeInto(n).some(p => p.flow) ? 400 : 0);
 
+// Client: same interface as circuits 1 and 2 (navy header, subtitle, pill tabs, green Start / amber Pause)
+{ const st = document.createElement('style'); st.textContent = `
+header{background:linear-gradient(90deg,#0d2536 0%,#14405a 55%,#1b5574 100%)!important;border-bottom:0!important;box-shadow:0 4px 18px #0b2a3d40;position:relative;z-index:30}
+header .header-title{color:#fff!important;text-shadow:0 2px 8px #0008;line-height:1.1!important}
+header .header-title::after{content:'INS SATHAVAHANA · CIRCUIT 3';display:block;font:700 clamp(9px,.62vw,16px)/1.9 Arial,sans-serif;letter-spacing:.28em;color:#8fc8e8;text-align:center;text-shadow:none}
+header .screens a{background:#ffffff14!important;border-color:#ffffff38!important;color:#d6e8f3!important}
+header .screens a[aria-current=page]{background:#fff!important;border-color:#fff!important;color:#0f2a3d!important}
+header #start{background:linear-gradient(180deg,#2bd06a,#16a34a)!important;border:0!important;color:#fff!important;border-radius:12px!important;font-weight:800!important}
+header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d98a14)!important}
+header #reset{background:#ffffff14!important;border:1px solid #ffffff38!important;color:#e6f1f8!important;border-radius:12px!important;font-weight:700}
+@media(max-width:1399px){header .header-title{display:none!important}}`; document.head.append(st); }
 // ---------------------------------------------------------------- DOM overlay: touch areas, banners
 {
   const st = document.createElement('style');
@@ -670,7 +712,7 @@ function guide() {
 const NUM = id => /^v\d+$/.test(id) ? id.slice(1) : { p1: '40/15', p2: '5/17' }[id] || '';
 const numEls = [...parts.values()].filter(p => NUM(p.id)).map(p => { const e = document.createElement('div'); e.className = 'vnum' + (p.type === 'pump' ? ' pump' : ''); e.textContent = NUM(p.id); labelsRoot.append(e); return { p, e }; });
 const runEls = ['p1', 'p2'].map(id => { const e = document.createElement('div'); e.className = 'vrun'; labelsRoot.append(e); return { p: parts.get(id), e }; });
-{ const st = document.createElement('style'); st.textContent = `.vnum{position:absolute;transform:translate(-50%,-50%);font:800 var(--num,13px)/1 Arial,sans-serif;color:#10242a;text-shadow:0 0 3px #fff,0 0 3px #fff,0 0 5px #fff;pointer-events:none;white-space:nowrap}
+{ const st = document.createElement('style'); st.textContent = `.vnum{position:absolute;transform:translate(-50%,-50%);font:800 var(--num,13px)/1 Arial,sans-serif;color:#123a52;background:#ffffffee;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.45em;padding:.2em .42em .2em .36em;box-shadow:0 .15em .5em #12405e22;pointer-events:none;white-space:nowrap}
 .vnum.pump{font-size:calc(var(--num,13px)*1.15)}
 .vrun{position:absolute;transform:translate(-50%,-50%);padding:.25em .7em;border-radius:999px;font:800 calc(var(--num,13px)*.85)/1.2 Arial,sans-serif;pointer-events:none;white-space:nowrap;background:#5d6b72;color:#fff}
 .vrun.on{background:#1f9e5a;box-shadow:0 0 0 3px #1f9e5a55}
@@ -722,9 +764,9 @@ const pumpView = (id, title) => openBlowerDetail({
   toggle: () => { const before = S.on[id]; tapAt[id] = -1e9; tap(id); return S.on[id] === before ? warnEl.textContent : ''; }
 });
 const SPOTS = [
-  ['p1', 1080, 805, () => pumpView('p1', 'Pump 40/15')], ['p2', 1335, 805, () => pumpView('p2', 'Pump 5/17')],
+  ['p1', 1192, 805, () => pumpView('p1', 'Pump 40/15')], ['p2', 1335, 805, () => pumpView('p2', 'Pump 5/17')],
   ['b3', 843, 1190, () => openBatteryDetail({ side: 'port', pressure: .145, title: 'Battery cell · III battery pit (water cooled)' })],
-  ['bf', 1700, 1287, () => openBatteryDetail({ side: 'stbd', pressure: .145, title: 'Battery cell · F/E battery pit (water cooled)' })]
+  ['bf', 1492, 1300, () => openBatteryDetail({ side: 'stbd', pressure: .145, title: 'Battery cell · F/E battery pit (water cooled)' })]
 ].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; });
 const startBtn = document.querySelector('#start'), resetBtn = document.querySelector('#reset');
 function allOff() { for (const k in S.open) S.open[k] = false; for (const k in S.on) S.on[k] = false; for (const p of parts.values()) if (p.wheel) p.wheelTarget = p.closedAngle; }
@@ -733,6 +775,26 @@ startBtn.addEventListener('click', () => { S.running = !S.running; if (!S.runnin
 resetBtn?.addEventListener('click', () => { S.running = false; allOff(); showRunState(); notify('Circuit reset — all valves closed, pumps stopped.', true); });
 showRunState();
 
+// ---------------------------------------------------------------- the drawing's own text (client: match the sheet)
+const DTEXT = [
+  ['M/R', 280, 372, 'zone'], ['E/R', 495, 372, 'zone'], ['III', 740, 372, 'zone'], ['C/R', 945, 372, 'zone'], ['F/E', 1580, 372, 'zone'],
+  ['Main motor panel', 180, 830, 'rot'], ['Grouper switch', 334, 830, 'rot'], ['Port', 432, 905, 'rot'], ['Stbd', 485, 905, 'rot'],
+  ['BATTERY BREAKER', 745, 805, 'big'], ['BATTERY BREAKER', 1580, 1132, 'big'], ['BATTERY PIT', 748, 1392, 'big'], ['BATTERY PIT', 1610, 1257, 'big'],
+  ['cooler', 1060, 500, ''], ['cooler', 1300, 500, ''], ['CM', 982, 730, 'b'], ['Expansion<br>tank', 1401, 640, ''], ['For blowing', 1350, 578, ''],
+  ['Ion-Exchange filter', 1002, 1236, 'rot'],
+  ['t', 252, 920, 'b'], ['t', 277, 925, 'b'], ['t', 435, 1000, 'b'], ['t', 482, 1000, 'b'], ['t', 630, 1125, 'b'], ['t', 1708, 1160, 'b'], ['t', 1118, 615, 'b'], ['P', 1118, 705, 'b'],
+  ['t = thermocouple<br>P = pressure sensor<br>CM = salinometer<br>M = motor', 1262, 1325, 'legend']
+].map(([t, x, y, k]) => { const e = document.createElement('div'); e.className = 'dtext ' + k; e.innerHTML = t; labelsRoot.append(e); return { e, x, y }; });
+{ const st = document.createElement('style'); st.textContent = `.dtext{position:absolute;transform:translate(-50%,-50%);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.95)/1.2 'Times New Roman',serif;color:#15191c;text-shadow:0 0 3px #fff,0 0 3px #fff}
+.dtext.rot{transform:translate(-50%,-50%) rotate(-90deg);font-family:Arial,sans-serif;color:#1b3c50}
+.dtext.big{font-size:calc(var(--num,13px)*1.2)}.dtext.b{font-size:calc(var(--num,13px)*1.25)}
+.dtext.zone{font:700 calc(var(--num,13px)*1.05)/1 Arial,sans-serif;letter-spacing:.12em;color:#fff;background:#1d4f6e;border-radius:999px;padding:.35em 1em;text-shadow:none}
+.dtext.legend{width:max-content;font-weight:400;text-align:left;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.6em;padding:.6em .9em;line-height:1.5;text-shadow:none}`; document.head.append(st); }
+for (const g of gauges) { const e = document.createElement('div'); e.className = 'gval' + (g.tag.endsWith(' ') ? ' compact' : ''); e.innerHTML = '<span>PG</span><small><b>0.00</b></small>'; /* as circuit 1: name and value (unit is on the dial) */ labelsRoot.append(e); g.chip = e; }
+{ const st = document.createElement('style'); st.textContent = `.gval{position:absolute;transform:translate(-50%,0);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.82)/1.15 Arial,sans-serif;color:#123a52;background:#ffffffec;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.55em;padding:.25em .55em .3em;box-shadow:0 .25em .7em #12405e22}
+.gval span{display:block}.gval small{display:block;font-size:.8em;color:#8aa0ad;margin-top:.1em}.gval.live small{color:#1f7a70}.gval.compact small{font-size:.75em}
+#next-step{background:linear-gradient(90deg,#0d2536,#1b5574)!important;border:1px solid #ffffff30}#next-step.ok{background:linear-gradient(90deg,#0f5b3a,#16a34a)!important}
+.vinfo span{border-color:#1d4f6e!important;color:#1d4f6e!important;background:#fff!important;box-shadow:0 .1em .4em #12405e33}`; document.head.append(st); }
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();
 function screenPoint(x, y, h = PIPE_Y) { v3.copy(P(x, y, h)).project(camera); return [(v3.x + 1) / 2 * host.clientWidth, (1 - v3.y) / 2 * host.clientHeight]; }
@@ -741,7 +803,7 @@ function layout() {
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
   if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
   renderer.setSize(w, h);
-  const PW = 1690, PH = 1150, cx = 968 - 1000, cz = 905 - 786, aspect = w / h;
+  const PW = WX(1813) - WX(123), PH = 1150, cx = (WX(1813) + WX(123)) / 2, cz = 905 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
   Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);
@@ -753,6 +815,8 @@ function layout() {
   for (const { p, e } of numEls) { const pump = p.type === 'pump', [sx, sy] = screenPoint(p.x + (pump ? 0 : 24), p.y + (pump ? -56 : -26), 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const { p, e } of runEls) { const [sx, sy] = screenPoint(p.x, p.y + 52, 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const s of SPOTS) { const [sx, sy] = screenPoint(s.x, s.y, 80); Object.assign(s.button.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const g of gauges) { const [sx, sy] = screenPoint(g.at[0], g.at[1] + 24, 80); Object.assign(g.chip.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const d of DTEXT) { const [sx, sy] = screenPoint(d.x, d.y, 80); Object.assign(d.e.style, { left: sx + 'px', top: sy + 'px' }); }
 }
 new ResizeObserver(layout).observe(host);
 window.visualViewport?.addEventListener('resize', layout);
@@ -781,7 +845,12 @@ function frame(now) {
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
   for (const k in DIAMONDS) tint(DIAMONDS[k], flowsAt(DIAMOND_PIPE[k]));
-  for (const g of gauges) g.set(pipes.some(p => (p.from === g.pipeKey || p.to === g.pipeKey) && p.reached) ? 160 : 20);
+  const spd = Math.max(parts.get('p1').speed, parts.get('p2').speed);
+  for (const g of gauges) {
+    const near = pipes.filter(p => p.from === g.pipeKey || p.to === g.pipeKey), want = near.some(p => p.flow) ? g.nom * spd : near.some(p => p.reached) ? g.nom * .45 * spd : 0;
+    g.p += (want - g.p) * Math.min(1, dt * 2.5); if (g.p < .005) g.p = 0;
+    g.set(g.p); const t = g.p.toFixed(2); const vb = g.chip.querySelector('b'); if (vb.textContent !== t) vb.textContent = t; g.chip.classList.toggle('live', g.p > .05);
+  }
   for (const pl of plumes) plumeUpdate(pl, dt, pl.key());
   const anyFlow = pipes.some(p => p.flow);
   for (const { b, sc } of batteries) b.update(dt, S.running ? (anyFlow ? .45 : .25) : 0, px * sc);
@@ -792,3 +861,4 @@ requestAnimationFrame(frame);
 // leaving the screen frees its graphics memory at once (phones keep the previous page alive otherwise)
 addEventListener('pagehide', () => { renderer.dispose(); renderer.forceContextLoss(); });
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // coming back to it: rebuild
+

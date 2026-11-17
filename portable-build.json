@@ -7,11 +7,11 @@
     "assets/assembled-air-particles.json",
     "assets/safety-release-detail.jpg",
     "assets/assembled-top-view.jpg",
-    "assets/battery-photo-top.jpg",
     "assets/circuit-reference.jpg",
+    "assets/battery-photo-top.jpg",
     "assets/icon-192.png"
   ],
-  "service_worker_cache": "battery-3d-096feacee940cd38",
+  "service_worker_cache": "battery-3d-9da63e43e1ef63ea",
   "cached_assets": 29,
   "no_external_runtime_dependencies": true
 }

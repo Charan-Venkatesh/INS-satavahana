@@ -761,10 +761,20 @@ function guide() {
   for (const p of parts.values()) p.button.classList.toggle('next', next.includes(p.id));
 }
 const NUM = id => /^v\d+$/.test(id) ? id.slice(1) : { p1: '40/15', p2: '5/17' }[id] || '';
+// which side of its valve each number tag sits on (u/d/l/r and corners); default upper right
+const TAG_SIDE = { v92: 'r', v91: 'l', v89: 'r', v98: 'ul', v34: 'r', v36: 'r', v39: 'ur', v76: 'l', v77: 'r', v81: 'dr', v83: 'r', v84: 'r', v17: 'r', v26: 'r', v56: 'r', v60: 'r', v47: 'l', v51: 'r', v53: 'ur', v116: 'l', v41: 'u', v49: 'u', v35: 'u', v40: 'u', v50: 'u', v54: 'u', v46: 'r' };
 const numEls = [...parts.values()].filter(p => NUM(p.id)).map(p => { const e = document.createElement('div'); e.className = 'vnum' + (p.type === 'pump' ? ' pump' : ''); e.textContent = NUM(p.id); labelsRoot.append(e); return { p, e }; });
 const runEls = ['p1', 'p2'].map(id => { const e = document.createElement('div'); e.className = 'vrun'; labelsRoot.append(e); return { p: parts.get(id), e }; });
 { const st = document.createElement('style'); st.textContent = `.vnum{position:absolute;transform:translate(-50%,-50%);font:800 var(--num,13px)/1 Arial,sans-serif;color:#123a52;background:#ffffffee;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.45em;padding:.2em .42em .2em .36em;box-shadow:0 .15em .5em #12405e22;pointer-events:none;white-space:nowrap}
 .vnum.pump{font-size:calc(var(--num,13px)*1.15)}
+#labels .vnum:not(.pump){transform:translate(0,-100%)}
+#labels .vnum[data-side=ul]{transform:translate(-100%,-100%)}#labels .vnum[data-side=l]{transform:translate(-100%,-50%)}#labels .vnum[data-side=r]{transform:translate(0,-50%)}
+#labels .vnum[data-side=u]{transform:translate(-50%,-100%)}#labels .vnum[data-side=d]{transform:translate(-50%,0)}#labels .vnum[data-side=dr]{transform:translate(0,0)}#labels .vnum[data-side=dl]{transform:translate(-100%,0)}
+#labels .vnum:not(.pump)::after{content:'';position:absolute;width:.55em;height:2px;background:#1f7fbf;left:-.5em;bottom:-.1em;transform:rotate(-35deg);transform-origin:right}
+#labels .vnum[data-side=ul]::after{left:auto;right:-.5em;transform:rotate(35deg);transform-origin:left}
+#labels .vnum[data-side=r]::after{bottom:auto;top:50%;transform:none}#labels .vnum[data-side=l]::after{left:auto;right:-.5em;bottom:auto;top:50%;transform:none}
+#labels .vnum[data-side=u]::after{left:50%;bottom:-.5em;width:2px;height:.5em;transform:none}#labels .vnum[data-side=d]::after{left:50%;bottom:auto;top:-.5em;width:2px;height:.5em;transform:none}
+#labels .vnum[data-side=dr]::after{bottom:auto;top:-.1em;transform:rotate(35deg)}#labels .vnum[data-side=dl]::after{left:auto;right:-.5em;bottom:auto;top:-.1em;transform:rotate(-35deg);transform-origin:left}
 .vrun{position:absolute;transform:translate(-50%,-50%);padding:.25em .7em;border-radius:999px;font:800 calc(var(--num,13px)*.85)/1.2 Arial,sans-serif;pointer-events:none;white-space:nowrap;background:#5d6b72;color:#fff}
 .vrun.on{background:#1f9e5a;box-shadow:0 0 0 3px #1f9e5a55}
 #labels .part-button.next::after{content:'';position:absolute;inset:-10px;border-radius:50%;border:4px solid #f5a623;animation:nextPulse 1.1s ease-in-out infinite;pointer-events:none}
@@ -829,20 +839,21 @@ showRunState();
 // ---------------------------------------------------------------- the drawing's own text (client: match the sheet)
 const DTEXT = [
   ['M/R', 280, 372, 'zone'], ['E/R', 495, 372, 'zone'], ['III', 740, 372, 'zone'], ['C/R', 945, 372, 'zone'], ['F/E', 1580, 372, 'zone'],
-  ['Main motor panel', 180, 830, 'rot'], ['Grouper switch', 334, 830, 'rot'], ['Port', 432, 905, 'rot'], ['Stbd', 485, 905, 'rot'],
-  ['BATTERY BREAKER', 745, 805, 'big'], ['BATTERY BREAKER', 1580, 1132, 'big'], ['BATTERY PIT', 748, 1392, 'big'], ['BATTERY PIT', 1610, 1257, 'big'],
-  ['cooler', 1060, 500, ''], ['cooler', 1300, 500, ''], ['Expansion<br>tank', 1401, 640, ''], ['For blowing', 1350, 578, ''],
+  ['Main motor panel', 180, 792, 'rot'], ['Grouper switch', 334, 760, 'rot'], ['Port', 432, 905, 'rot'], ['Stbd', 485, 905, 'rot'],
+  ['Battery Breaker', 745, 800, 'big'], ['Battery Breaker', 1580, 1132, 'big'], ['Battery Pit', 760, 1158, 'big'], ['Battery Pit', 1610, 1252, 'big'],
+  ['Cooler', 1060, 502, ''], ['Cooler', 1300, 502, ''], ['Expansion tank', 1401, 590, ''], ['For blowing', 1342, 624, ''],
   ['Ion-Exchange filter', 1002, 1236, 'rot'], ['90', 1101, 1290, 'b'], ['86', 1185, 1065, 'b'],
   ['t = thermocouple<br>P = pressure sensor<br>CM = salinometer<br>M = motor', 1262, 1325, 'legend']
 ].map(([t, x, y, k]) => { const e = document.createElement('div'); e.className = 'dtext ' + k; e.innerHTML = t; labelsRoot.append(e); return { e, x, y }; });
-{ const st = document.createElement('style'); st.textContent = `.dtext{position:absolute;transform:translate(-50%,-50%);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.95)/1.2 'Times New Roman',serif;color:#15191c;text-shadow:0 0 3px #fff,0 0 3px #fff}
-.dtext.rot{transform:translate(-50%,-50%) rotate(-90deg);font-family:Arial,sans-serif;color:#1b3c50}
-.dtext.big{font-size:calc(var(--num,13px)*1.2)}.dtext.b{font-size:calc(var(--num,13px)*1.25)}
+{ const st = document.createElement('style'); st.textContent = `.dtext{position:absolute;transform:translate(-50%,-50%);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.95)/1.2 Arial,sans-serif;color:#123a52;background:#ffffffee;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.55em;padding:.28em .65em .32em;box-shadow:0 .25em .7em #12405e22}
+.dtext.rot{transform:translate(-50%,-50%) rotate(-90deg)}
+.dtext.big{font-size:calc(var(--num,13px)*1.08);letter-spacing:.02em}
+.dtext.b{font:800 calc(var(--num,13px)*.95)/1 Arial,sans-serif;padding:.2em .42em .2em .36em;border-radius:.45em}
 .dtext.zone{font:700 calc(var(--num,13px)*1.05)/1 Arial,sans-serif;letter-spacing:.12em;color:#fff;background:#1d4f6e;border-radius:999px;padding:.35em 1em;text-shadow:none}
-.dtext.legend{width:max-content;font-weight:400;text-align:left;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.6em;padding:.6em .9em;line-height:1.5;text-shadow:none}`; document.head.append(st); }
+.dtext.legend{width:max-content;font:400 calc(var(--num,13px)*.9)/1.55 Arial,sans-serif;text-align:left;border-left-color:#8aa0ad;padding:.6em .9em}`; document.head.append(st); }
 for (const g of gauges) { const e = document.createElement('div'); e.className = 'gval' + (g.tag.endsWith(' ') ? ' compact' : ''); e.innerHTML = '<span>PG</span><small><b>0.00</b></small>'; /* as circuit 1: name and value (unit is on the dial) */ labelsRoot.append(e); g.chip = e; }
-{ const st = document.createElement('style'); st.textContent = `.gval{position:absolute;transform:translate(-50%,0);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.82)/1.15 Arial,sans-serif;color:#123a52;background:#ffffffec;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.55em;padding:.25em .55em .3em;box-shadow:0 .25em .7em #12405e22}
-.gval span{display:block}.gval small{display:block;font-size:.8em;color:#8aa0ad;margin-top:.1em}.gval.live small{color:#1f7a70}.gval.compact small{font-size:.75em}
+{ const st = document.createElement('style'); st.textContent = `.gval{position:absolute;transform:translate(-50%,0);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.9)/1.15 Arial,sans-serif;color:#123a52;background:#ffffffec;border:1px solid #cfdde7;border-left:.28em solid #1f7fbf;border-radius:.55em;padding:.25em .55em .3em;box-shadow:0 .25em .7em #12405e22}
+.gval span{display:block}.gval small{display:block;font-size:.92em;color:#8aa0ad;margin-top:.1em}.gval.live small{color:#1f7a70}.gval.compact small{font-size:.75em}
 #next-step{background:linear-gradient(90deg,#0d2536,#1b5574)!important;border:1px solid #ffffff30}#next-step.ok{background:linear-gradient(90deg,#0f5b3a,#16a34a)!important}
 .vinfo span{border-color:#1d4f6e!important;color:#1d4f6e!important;background:#fff!important;box-shadow:0 .1em .4em #12405e33}`; document.head.append(st); }
 // ---------------------------------------------------------------- live instruments (client: P, CM and the tank level respond)
@@ -877,12 +888,12 @@ function instruments(dt, spd) {
 // Cooled water leaves the coolers at ~26 °C (35 °C if no cooler path is open); each panel / battery pit warms the water
 // a few degrees while its branch flows, and heats up toward its idle temperature when its water is shut off.
 const TSENS = [
-  ['Main motor panel', 252, 925, () => flowsAt('mca'), 8, 52], ['Grouper switch', 277, 872, () => flowsAt('mcb'), 7, 50],
-  ['Port panel', 435, 985, () => flowsAt('ecp'), 8, 52], ['Stbd panel', 482, 958, () => flowsAt('ecs'), 8, 52],
+  ['Main motor panel', 252, 893, () => flowsAt('mca'), 8, 52], ['Grouper switch', 334, 930, () => flowsAt('mcb'), 7, 50],
+  ['Port panel', 435, 985, () => flowsAt('ecp'), 8, 52], ['Stbd panel', 533, 1000, () => flowsAt('ecs'), 8, 52],
   ['III battery pit', 630, 1125, () => coil3.flow, 6, 48], ['F/E battery pit', 1708, 1160, () => coilF.flow, 6, 48],
   ['Cooled water (pump discharge)', 1118, 615, null, 0, 0]
 ].map(([name, x, y, flow, rise, hot]) => { const e = document.createElement('div'); e.className = 'dtext tval'; e.innerHTML = 't<small>30 °C</small>'; labelsRoot.append(e); return { name, x, y, flow, rise, hot, e, T: 30 }; });
-{ const st = document.createElement('style'); st.textContent = `.dtext.tval{font:700 calc(var(--num,13px)*1.25)/1 'Times New Roman',serif;line-height:1}.dtext.tval small{display:block;margin-top:.15em;font:800 calc(var(--num,13px)*.72)/1.1 Arial,sans-serif;color:#1f7a70;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.4em;padding:.12em .3em}
+{ const st = document.createElement('style'); st.textContent = `.dtext.tval{font:700 calc(var(--num,13px)*1.2)/1 'Times New Roman',serif;line-height:1;background:none;border:0;box-shadow:none;padding:0;color:#15191c}.dtext.tval small{display:block;margin-top:.15em;font:800 calc(var(--num,13px)*.85)/1.1 Arial,sans-serif;color:#1f7a70;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.4em;padding:.12em .3em}
 .dtext.tval.warn small{color:#a86a00;border-color:#e8a21a}.dtext.tval.alarm small{color:#fff;background:#d8322b;border-color:#d8322b;animation:instAlarm 1s ease-in-out infinite}`; document.head.append(st); }
 const supplyTemp = () => !S.running ? 30 : coolerPath() && pipes.some(p => p.flow) ? 26 : 35;
 function temps(dt) {
@@ -942,8 +953,13 @@ function layout() {
     const [sx, sy] = screenPoint(p.x, p.y), s = Math.max(44, p.size * pxPerUnit);
     Object.assign(p.button.style, { left: sx + 'px', top: sy + 'px', width: s + 'px', height: s + 'px', minWidth: '44px', minHeight: '44px' });
   }
-  labelsRoot.style.setProperty('--num', Math.min(30, Math.max(10, 17 * pxPerUnit)).toFixed(1) + 'px');
-  for (const { p, e } of numEls) { const pump = p.type === 'pump', [sx, sy] = screenPoint(p.x + (pump ? 0 : 24), p.y + (pump ? -56 : -26), 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
+  labelsRoot.style.setProperty('--num', Math.min(34, Math.max(13, 21 * pxPerUnit)).toFixed(1) + 'px');   // client: labels readable on the big screen
+  for (const { p, e } of numEls) {
+    if (p.type === 'pump') { const [sx, sy] = screenPoint(p.x, p.y - 56, 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); continue; }
+    const [sx, sy] = screenPoint(p.x, p.y, 80), r = Math.max(14, p.size * pxPerUnit * .42), side = TAG_SIDE[p.id] || 'ur';
+    const dx = side.includes('l') ? -1 : side.includes('r') ? 1 : 0, dy = side.includes('u') ? -1 : side.includes('d') ? 1 : 0;
+    e.dataset.side = side; Object.assign(e.style, { left: sx + dx * (r + 6) + 'px', top: sy + dy * (r + 4) + 'px' });
+  }
   for (const { p, e } of runEls) { const [sx, sy] = screenPoint(p.x, p.y + 52, 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const s of SPOTS) { const [sx, sy] = screenPoint(s.x, s.y, 80); Object.assign(s.button.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const g of gauges) { const [sx, sy] = screenPoint(g.at[0], g.at[1] + (g.up ? -30 : 24), 80); Object.assign(g.chip.style, { left: sx + 'px', top: sy + 'px', transform: g.up ? 'translate(-50%,-100%)' : '' }); }

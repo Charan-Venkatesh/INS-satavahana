@@ -14,9 +14,10 @@ import {loadPump, PUMP_REV_PER_S, PUMP_SPIN_UP_S, PUMP_COAST_S} from './pump-mod
 const host = document.querySelector('#viewport'), labelsRoot = document.querySelector('#labels'), circuit = document.querySelector('#circuit');
 // client: fill the wide screen and give the crowded C/R plant room. Plan x is spread piecewise: M/R..III and F/E
 // a little, C/R (920-1435 on the drawing) much more. Parts keep their shape; only positions spread.
-const XA = 1.16, XB = 1.70, XC = 1.18, SX = 1.32;
-const WX = x => x <= 920 ? -105.6 + (x - 920) * XA : x <= 1435 ? -105.6 + (x - 920) * XB : -105.6 + 515 * XB + (x - 1435) * XC;
-const WXinv = w => w <= -105.6 ? 920 + (w + 105.6) / XA : w <= -105.6 + 515 * XB ? 920 + (w + 105.6) / XB : 1435 + (w + 105.6 - 515 * XB) / XC;
+// client: "elaborate the screen, scroll to the side" — the whole plan is spread a further WIDE x and the screen scrolls sideways
+const WIDE = 1.7, XA = 1.16 * WIDE, XB = 1.70 * WIDE, XC = 1.18 * WIDE, SX = 1.32 * WIDE, X0 = -105.6 * WIDE;
+const WX = x => x <= 920 ? X0 + (x - 920) * XA : x <= 1435 ? X0 + (x - 920) * XB : X0 + 515 * XB + (x - 1435) * XC;
+const WXinv = w => w <= X0 ? 920 + (w - X0) / XA : w <= X0 + 515 * XB ? 920 + (w - X0) / XB : 1435 + (w - X0 - 515 * XB) / XC;
 const P = (x, y, h = 0) => new T.Vector3(WX(x), h, y - 786);
 const PIPE_Y = 24;
 const FILL_SPEED = 520;                                  // plan units / s at which pumped water fills a pipe up to the next closed part
@@ -313,9 +314,9 @@ function dial(x, y, kind = 'arrow') {                          // circuit 1's PG
 
 // ---------------------------------------------------------------- symbols drawn as on the schematic
 const STEM = new T.MeshStandardMaterial({ color: '#5d6b72', metalness: .6, roughness: .4 }), RIM = new T.MeshStandardMaterial({ color: '#0f5f4a', roughness: .4 });
-const BLACK = new T.MeshStandardMaterial({ color: '#1d2327', roughness: .45 }), WHEEL = new T.MeshPhysicalMaterial({ color: '#1f8a6c', roughness: .35, clearcoat: .5 });
-const GATE_ON = new T.Color('#1f9e7a');
-const stateBody = () => new T.MeshPhysicalMaterial({ color: LAMP_IDLE.clone(), roughness: .3, metalness: .1, transparent: true, opacity: .9, clearcoat: .6 });
+const BLACK = new T.MeshStandardMaterial({ color: '#1d2327', roughness: .45, side: T.DoubleSide }), WHEEL = new T.MeshPhysicalMaterial({ color: '#1f8a6c', roughness: .35, clearcoat: .5 });
+const GATE_ON = new T.Color('#1f9e7a'), VALVE_IDLE = new T.Color('#f2f5f6');   // valves white when the circuit is off, as drawn
+const stateBody = () => new T.MeshPhysicalMaterial({ color: LAMP_IDLE.clone(), roughness: .3, metalness: .1, transparent: true, opacity: .9, clearcoat: .6, side: T.DoubleSide });   // flat symbol faces seen from above
 function handwheel(g, s, lean = .55) {                       // stem leaning toward the viewer with a round handwheel
   const arm = new T.Group(); arm.rotation.x = -Math.PI / 2 + lean; g.add(arm);
   const stem = new T.Mesh(new T.CylinderGeometry(2.6 * s, 2.6 * s, 34 * s, 10), STEM); stem.position.y = 17 * s; arm.add(stem);
@@ -325,47 +326,62 @@ function handwheel(g, s, lean = .55) {                       // stem leaning tow
   return wheel;
 }
 // gate valve ⋈ (two cones point to point along the pipe) — with check: true the schematic's half-black stop-check valve
-function gate(id, x, y, title, { vertical = false, s = .6, check = false, down = false } = {}) {
-  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); if (vertical) g.rotation.y = Math.PI / 2; scene.add(g);
-  const body = stateBody();
-  for (const sgn of [-1, 1]) {
-    const c = new T.Mesh(new T.ConeGeometry(22 * s, 26 * s, 32, 1, true), check && (down ? sgn < 0 : sgn > 0) ? BLACK : body); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 13 * s; g.add(c);
-    const rim = new T.Mesh(new T.TorusGeometry(22 * s, 1.6 * s, 8, 32), RIM); rim.rotation.y = Math.PI / 2; rim.position.x = sgn * 26 * s; g.add(rim);
+function gate(id, x, y, title, { vertical = false, s = .6, check = false, down = false } = {}) {   // drawing: ▷◁ outlined, spindle out to the side with a T-bar
+  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y + 6)); if (vertical) g.rotation.y = Math.PI / 2; scene.add(g);
+  const body = stateBody(), ink = new T.LineBasicMaterial({ color: '#15191c' }), A = 26 * s, Hh = 20 * s;
+  for (const sg of [-1, 1]) {
+    const pts = [new T.Vector2(0, 0), new T.Vector2(sg * A, -Hh), new T.Vector2(sg * A, Hh)];
+    const tri = new T.Mesh(new T.ShapeGeometry(new T.Shape(pts)), check && (down ? sg < 0 : sg > 0) ? BLACK : body); tri.rotation.x = Math.PI / 2; tri.renderOrder = 9; g.add(tri);
+    const ln = new T.LineLoop(new T.BufferGeometry().setFromPoints(pts.map(p => new T.Vector3(p.x, .6, p.y))), ink); ln.renderOrder = 10; g.add(ln);
   }
-  const wheel = handwheel(g, s);
-  return addPart(id, 'valve', x, y, title, Math.max(46, 70 * s), { key: id, face: 27 * s, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON }, wheel, wheelTarget: 0, closedAngle: 0, openAngle: -4 * Math.PI });
+  const L = 34 * s;                                                   // spindle (the drawing's hatched double line) and T-bar, to the left of a vertical valve / above a horizontal one
+  for (const o of [-1.6, 1.6]) { const r = new T.Mesh(new T.BoxGeometry(1.4 * Math.max(1, s * 1.6), 1.2, L), STEM); r.position.set(o * s * 1.6, 1, -L / 2); g.add(r); }
+  const bar = new T.Mesh(new T.BoxGeometry(30 * s, 1.6, 4.2 * s), BLACK); bar.position.set(0, 1.2, -L); g.add(bar);
+  return addPart(id, 'valve', x, y, title, Math.max(46, 70 * s), { key: id, face: A + 1, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON, idle: VALVE_IDLE }, wheel: new T.Group(), wheelTarget: 0, closedAngle: 0, openAngle: 0 });
 }
 // angle valve: two cones at 90°, one on the inlet leg and one on the outlet leg ([dx, dy] plan directions away from the body)
-function angleValve(id, x, y, title, inDir, outDir, s = .45) {
-  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y)); scene.add(g);
-  const body = stateBody();
+function angleValve(id, x, y, title, inDir, outDir, s = .45) {   // drawing's angle valve: ▽ on the pipe, ◁ to the side, T handle — black outlines
+  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y + 6)); scene.add(g);
+  const body = stateBody(), edge = new T.LineBasicMaterial({ color: '#15191c' }), S2 = 44 * s, W2 = 28 * s;
   for (const [dx, dy] of [inDir, outDir]) {
-    const d = new T.Vector3(dx, 0, dy).normalize(), c = new T.Mesh(new T.ConeGeometry(22 * s, 26 * s, 32, 1, true), body);
-    c.quaternion.setFromUnitVectors(UP, d.clone().negate()); c.position.copy(d).multiplyScalar(13 * s); g.add(c);
-    const rim = new T.Mesh(new T.TorusGeometry(22 * s, 1.6 * s, 8, 32), RIM); rim.quaternion.setFromUnitVectors(new T.Vector3(0, 0, 1), d); rim.position.copy(d).multiplyScalar(26 * s); g.add(rim);
+    const d = new T.Vector2(dx * XB / Math.hypot(dx * XB, dy) || 0, dy / Math.hypot(dx * XB, dy) || 0), n = new T.Vector2(-d.y, d.x);
+    const pts = [new T.Vector2(0, 0), new T.Vector2(d.x * S2 + n.x * W2, d.y * S2 + n.y * W2), new T.Vector2(d.x * S2 - n.x * W2, d.y * S2 - n.y * W2)];
+    const tri = new T.Mesh(new T.ShapeGeometry(new T.Shape(pts)), body); tri.rotation.x = Math.PI / 2; tri.renderOrder = 9; g.add(tri);
+    const ln = new T.LineLoop(new T.BufferGeometry().setFromPoints(pts.map(p => new T.Vector3(p.x, .5, p.y))), edge); ln.renderOrder = 10; g.add(ln);
   }
-  const wheel = handwheel(g, s);
-  return addPart(id, 'valve', x, y, title, Math.max(44, 70 * s), { key: id, face: 27 * s, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON }, wheel, wheelTarget: 0, closedAngle: 0, openAngle: -4 * Math.PI });
+  const h = new T.Vector2(-outDir[0], -outDir[1]).normalize(), hn = new T.Vector2(-h.y, h.x), L = 30 * s, B = 15 * s;   // T handle straight out opposite the outlet (drawing)
+  const handle = new T.LineSegments(new T.BufferGeometry().setFromPoints([new T.Vector3(0, 1, 0), new T.Vector3(h.x * L, 1, h.y * L), new T.Vector3(h.x * L + hn.x * B, 1, h.y * L + hn.y * B), new T.Vector3(h.x * L - hn.x * B, 1, h.y * L - hn.y * B)]), edge); handle.renderOrder = 10; g.add(handle);
+  const stem = new T.Mesh(new T.CylinderGeometry(1.6 * s * 2, 1.6 * s * 2, L, 8), STEM); stem.quaternion.setFromUnitVectors(UP, new T.Vector3(h.x, 0, h.y)); stem.position.set(h.x * L / 2, 1, h.y * L / 2); g.add(stem);
+  const bar = new T.Mesh(new T.BoxGeometry(2 * B, 2.4, 3.2 * s * 2), STEM); bar.position.set(h.x * L, 1, h.y * L); bar.rotation.y = -Math.atan2(hn.y, hn.x); g.add(bar);
+  return addPart(id, 'valve', x, y, title, Math.max(44, 70 * s), { key: id, face: 4, lamp: { ring: { material: body }, glow: { material: { color: new T.Color() } }, color: LAMP_IDLE.clone(), on: GATE_ON, idle: VALVE_IDLE }, wheel: new T.Group(), wheelTarget: 0, closedAngle: 0, openAngle: 0 });
 }
 // needle valve at each gauge: a small fixed ⋈ with a T handle
 const NEEDLE = new T.MeshStandardMaterial({ color: '#7d8a91', metalness: .5, roughness: .35 });
-function needle(x, y, vertical) {
-  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y - 2)); if (vertical) g.rotation.y = Math.PI / 2; scene.add(g);
-  for (const sgn of [-1, 1]) { const c = new T.Mesh(new T.ConeGeometry(7, 9, 20), NEEDLE); c.rotation.z = sgn * Math.PI / 2; c.position.x = sgn * 4.5; g.add(c); }
-  const st = new T.Mesh(new T.BoxGeometry(2, 2, 12), STEM); st.position.set(0, 6, -6); g.add(st);
-  const t = new T.Mesh(new T.BoxGeometry(11, 2, 2), STEM); t.position.set(0, 6, -12); g.add(t);
+function needle(x, y, vertical) {                            // drawing's gauge cock: bowtie with a forked handle
+  const g = new T.Group(); g.position.copy(P(x, y, PIPE_Y + 6)); if (vertical) g.rotation.y = Math.PI / 2; scene.add(g);
+  const white = new T.MeshBasicMaterial({ color: '#ffffff', toneMapped: false, side: T.DoubleSide }), ink = new T.LineBasicMaterial({ color: '#15191c' });
+  for (const sg of [-1, 1]) {
+    const pts = [new T.Vector2(0, 0), new T.Vector2(sg * 10, -7), new T.Vector2(sg * 10, 7)];
+    const tri = new T.Mesh(new T.ShapeGeometry(new T.Shape(pts)), white); tri.rotation.x = Math.PI / 2; tri.renderOrder = 9; g.add(tri);
+    const ln = new T.LineLoop(new T.BufferGeometry().setFromPoints(pts.map(p => new T.Vector3(p.x, .5, p.y))), ink); ln.renderOrder = 10; g.add(ln);
+  }
+  const stem = new T.Mesh(new T.BoxGeometry(1.8, 1.5, 11), BLACK); stem.position.set(0, 1, -5.5); g.add(stem);
+  for (const sg of [-1, 1]) { const f = new T.Mesh(new T.BoxGeometry(1.8, 1.5, 9), BLACK); f.position.set(sg * 2.8, 1, -15); f.rotation.y = -sg * .5; g.add(f); const ft = new T.Mesh(new T.BoxGeometry(5, 1.5, 1.8), BLACK); ft.position.set(sg * 5.2, 1, -19.2); g.add(ft); }   /* legs spread apart, each with a foot, as drawn */
 }
+
 // pressure gauge on its tapping: instrument line from the pipe, needle valve, then the dial (arrow swings with pressure)
 const gauges = [];
 function gauge(line, dialAt, pipeKey, tag = '') {
   wire([...line, dialAt]); const n = line[line.length - 1], m = line[line.length - 2];
-  needle(n[0], n[1], Math.abs(n[0] - m[0]) < 1);
+  const dW = (a, b) => Math.hypot(WX(a[0]) - WX(b[0]), a[1] - b[1]); let nn = n;
+  if (dW(n, dialAt) < 52) { const L = dW(n, m), t = Math.min(.8, (52 - dW(n, dialAt)) / Math.max(1, L)); nn = [n[0] + (m[0] - n[0]) * t, n[1] + (m[1] - n[1]) * t]; }   // keep the cock visible beside the case
+  needle(nn[0], nn[1], Math.abs(n[0] - m[0]) < 1);
   { const d = new T.Vector3(WX(n[0]) - WX(dialAt[0]), 0, n[1] - dialAt[1]).normalize(), base = P(dialAt[0], dialAt[1], PIPE_Y + 4), q = new T.Quaternion().setFromUnitVectors(UP, d);
     const brass = new T.MeshStandardMaterial({ color: '#c9a24a', metalness: .9, roughness: .3 });
-    const stem = new T.Mesh(new T.CylinderGeometry(4.2, 4.2, 14, 16), brass); stem.quaternion.copy(q); stem.position.copy(base).addScaledVector(d, 33); scene.add(stem);
-    const nut = new T.Mesh(new T.CylinderGeometry(6.4, 6.4, 6, 6), brass); nut.quaternion.copy(q); nut.position.copy(base).addScaledVector(d, 42); scene.add(nut); }
+    const stem = new T.Mesh(new T.CylinderGeometry(4.2, 4.2, 14, 16), brass); stem.quaternion.copy(q); stem.position.copy(base).addScaledVector(d, 33); stem.scale.y = .5; scene.add(stem);
+    const nut = new T.Mesh(new T.CylinderGeometry(5.2, 5.2, 4, 6), brass); nut.quaternion.copy(q); nut.position.copy(base).addScaledVector(d, 37); scene.add(nut); }
   const nom = /^v8[34]$/.test(pipeKey) ? 3.2 : pipeKey === 'v47' ? 2.8 : pipeKey === 'ix' ? 1.4 : /^(ma1|mb1|ep1|es1|b3i|bfi)$/.test(pipeKey) ? 2.6 : 1.8;   // kg/cm²: pump discharge highest, panel outlets lowest
-  gauges.push({ set: dial(dialAt[0], dialAt[1]), pipeKey, at: dialAt, nom, p: 0, tag });
+  gauges.push({ set: dial(dialAt[0], dialAt[1]), pipeKey, at: dialAt, nom, p: 0, tag, up: nn[1] > dialAt[1] + 5 });   // cock below the gauge: its tag goes above
 }
 // thermocouple t / pressure sensor P: the schematic's boxed dark triangle beside the pipe
 function sensor(x, y, side = 1, letter = 't') {
@@ -387,7 +403,11 @@ function diamond3(x, y, kind, size = 44, tall = 1.55) {
   const top = canvasTexture(128, (c, s) => {
     c.fillStyle = '#ffffff'; c.fillRect(0, 0, s, s); c.strokeStyle = '#1d2327'; c.lineWidth = 5;
     if (kind === 'cooler') { c.beginPath(); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.stroke(); }
-    else if (kind === 'cross') { c.beginPath(); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.stroke(); }
+    else if (kind === 'cross') {                                   // drawing: vertical line, horizontal line with arrows pointing in to it
+      c.beginPath(); c.moveTo(s - 8, 8); c.lineTo(8, s - 8); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.stroke();
+      c.fillStyle = '#1d2327'; const m = s / 2, k = 22;
+      for (const sg of [-1, 1]) { const tx = m + sg * 5, ty = m + sg * 5; c.beginPath(); c.moveTo(tx, ty); c.lineTo(tx + sg * k, ty + sg * k - sg * 15); c.lineTo(tx + sg * k - sg * 15, ty + sg * k); c.closePath(); c.fill(); }
+    }
     else { c.setLineDash([12, 10]); c.beginPath(); c.moveTo(8, 8); c.lineTo(s - 8, s - 8); c.stroke(); }
   });
   const side = new T.MeshStandardMaterial({ color: '#46525a', metalness: .4, roughness: .45 }), face = new T.MeshStandardMaterial({ map: top, roughness: .5 });
@@ -398,22 +418,22 @@ function diamond3(x, y, kind, size = 44, tall = 1.55) {
 // battery breaker cooler: two glass columns (with their floats) either side of a cross-diamond exchanger
 function exchanger(x, y) {
   for (const dx of [-23, 23]) {
-    const t = new T.Mesh(new T.CylinderGeometry(10, 10, 140, 24), new T.MeshPhysicalMaterial({ color: '#8fb3c6', roughness: .05, transparent: true, opacity: .45, clearcoat: 1 }));
-    t.rotation.x = Math.PI / 2; t.position.copy(P(x + dx, y, PIPE_Y)); t.renderOrder = 6; scene.add(t);
-    for (const e of [-1, 1]) { const cap = new T.Mesh(new T.CylinderGeometry(11.5, 11.5, 5, 24), steel); cap.rotation.x = Math.PI / 2; cap.position.copy(P(x + dx, y + e * 70, PIPE_Y)); scene.add(cap); }
+    const wall = new T.Mesh(new T.BoxGeometry(24, 20, 144), new T.MeshStandardMaterial({ color: '#8d989e', metalness: .3, roughness: .55 })); wall.position.copy(P(x + dx, y, PIPE_Y)); scene.add(wall);
+    const inner = new T.Mesh(new T.BoxGeometry(14, 1, 132), new T.MeshBasicMaterial({ color: '#f4f7f8', toneMapped: false })); inner.position.copy(P(x + dx, y, PIPE_Y + 10.2)); scene.add(inner);
+    const bar = new T.Mesh(new T.BoxGeometry(14, 1, 1.6), BLACK); bar.position.copy(P(x + dx, y + 44, PIPE_Y + 10.8)); scene.add(bar);
     const fl = new T.Mesh(new T.ShapeGeometry(new T.Shape([new T.Vector2(-8, -7), new T.Vector2(8, -7), new T.Vector2(0, 8)])), BLACK); fl.rotation.x = -Math.PI / 2; fl.position.copy(P(x + dx, y + 58, PIPE_Y + 12)); scene.add(fl);
   }
   return diamond3(x, y, 'cross', 34);
 }
 
 // ---------------------------------------------------------------- compartments and battery pits
-{ const f = new T.Mesh(new T.PlaneGeometry(2800 * SX, 2000), new T.MeshBasicMaterial({ map: floorTex, toneMapped: false })); f.rotation.x = -Math.PI / 2; f.position.y = -700; scene.add(f); }
+{ const f = new T.Mesh(new T.PlaneGeometry(9000, 2000), new T.MeshBasicMaterial({ map: floorTex, toneMapped: false })); f.rotation.x = -Math.PI / 2; f.position.y = -700; scene.add(f); }
 for (const x of [380, 578, 920, 1435]) {                   // M/R | E/R | III | C/R | F/E
   const d = new T.Line(new T.BufferGeometry().setFromPoints([P(x, 345, -18), P(x, 1465, -18)]), new T.LineDashedMaterial({ color: '#7d94a0', dashSize: 16, gapSize: 12 })); d.computeLineDistances(); scene.add(d);
 }
 const batteries = [], PITS = { III: { x0: 652, x1: 843, y0: 1176, y1: 1367, cells: [690, 735, 780, 825], cy: 1310 }, FE: { x0: 1520, x1: 1700, y0: 1273, y1: 1455, cells: [1552, 1594, 1636, 1678], cy: 1405 } };
 for (const [name, pit] of Object.entries(PITS)) {
-  const w = pit.x1 - pit.x0, h = pit.y1 - pit.y0, c = P((pit.x0 + pit.x1) / 2, (pit.y0 + pit.y1) / 2, -20);
+  const w = WX(pit.x1) - WX(pit.x0), h = pit.y1 - pit.y0, c = P((pit.x0 + pit.x1) / 2, (pit.y0 + pit.y1) / 2, -20);
   const floor = new T.Mesh(new T.PlaneGeometry(w, h), mat.pit); floor.rotation.x = -Math.PI / 2; floor.position.copy(c); scene.add(floor);
   const edge = new T.LineSegments(new T.EdgesGeometry(new T.PlaneGeometry(w, h)), new T.LineBasicMaterial({ color: '#2a9d8f' })); edge.rotation.x = -Math.PI / 2; edge.position.copy(c).setY(-19); scene.add(edge);
   for (const x of pit.cells) {
@@ -597,7 +617,9 @@ pipe('C1', 'ix', 'side', [[1067, 1028], [1067, 1110], [1002, 1110]], 'side', { r
 pipe('ix', 'IXo', 'side', [[1002, 1110], [972, 1110]], 'side', { r: RS });
 pipe('C1', 'v98', 'side', [[1067, 1028], [938, 1028], [938, 1110]], 'side', { r: RS });
 pipe('v98', 'IXo', 'side', [[938, 1110], [972, 1110]], 'side', { r: RS });
-pipe('IXo', 'v34', 'side', [[972, 1110], [972, 845]], 'side', { r: RS });
+const hopV = (x, ya, yb) => Array.from({ length: 11 }, (_, i) => { const a = Math.PI * i / 10, R = Math.abs(ya - yb) / 2; return [x - R * 1.1 * Math.sin(a), (ya + yb) / 2 + (ya - yb) / 2 * Math.cos(a), PIPE_Y + 18 * Math.sin(a)]; });
+pipe('IXo', 'v34', 'side', [[972, 1110], ...hopV(972, 1046, 1010), [972, 845]], 'side', { r: RS });   // hops over the 98 line, as drawn
+{ const dot = new T.Mesh(new T.SphereGeometry(7, 16, 12), BLACK); dot.position.copy(P(972, 1110, PIPE_Y + 4)); scene.add(dot); }   // the drawing's junction dot
 pipe('v34', 'CMJ', 'side', [[972, 845], [1015, 845]], 'side', { r: RS });
 pipe('CMJ', 'cm', 'side', [[1015, 845], [1015, 760]], 'side', { r: RS });
 pipe('cm', 'v91', 'side', [[1015, 700], [1015, 690], [1045, 690], [1045, 900], [1110, 900], [1110, 1145]], 'side', { r: RS });
@@ -646,7 +668,7 @@ for (const [x, y, side] of [[222, 920, 1], [307, 925, -1], [405, 1000, 1], [512,
 sensor(1148, 705, -1, 'P');
 for (const [x, y, v, r] of FLEXES) flex(x, y, v, r);
 gauge([[222, 735], [185, 735], [185, 700]], [185, 655], 'ma1'); gauge([[222, 1040], [185, 1040], [185, 1015]], [185, 975], 'mca');
-gauge([[307, 740], [265, 740], [265, 700]], [265, 655], 'mb1'); gauge([[307, 1080], [265, 1080], [265, 1035]], [265, 990], 'mcb');
+gauge([[307, 740], [265, 740], [265, 700]], [265, 655], 'mb1'); gauge([[307, 1098], [265, 1098], [265, 1058]], [265, 1012], 'mcb');
 gauge([[405, 860], [437, 860], [437, 830]], [437, 790], 'ep1'); gauge([[405, 1020], [440, 1020], [440, 1075]], [440, 1110], 'ecp');
 gauge([[512, 790], [480, 790], [480, 760]], [480, 718], 'es1'); gauge([[512, 1100], [478, 1100], [478, 1082]], [478, 1050], 'ecs');
 gauge([[722, 905], [722, 880], [710, 880]], [683, 880], 'b3i'); gauge([[768, 905], [768, 880], [790, 880]], [825, 880], 'b3i');
@@ -700,6 +722,15 @@ header #start{background:linear-gradient(180deg,#2bd06a,#16a34a)!important;borde
 header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d98a14)!important}
 header #reset{background:#ffffff14!important;border:1px solid #ffffff38!important;color:#e6f1f8!important;border-radius:12px!important;font-weight:700}
 @media(max-width:1399px){header .header-title{display:none!important}}`; document.head.append(st); }
+{ const st = document.createElement('style'); st.textContent = `#circuit{overflow-x:auto!important;overflow-y:hidden!important;touch-action:pan-x!important;scrollbar-width:thin;scrollbar-color:#1d4f6e #dcebf4}
+#circuit::-webkit-scrollbar{height:12px}#circuit::-webkit-scrollbar-thumb{background:#1d4f6e;border-radius:6px}#circuit::-webkit-scrollbar-track{background:#dcebf4}
+#viewport{inset:0 auto 0 0!important;height:100%}#labels{inset:0 auto 0 0!important}
+#next-step,#vent-warning{position:fixed!important}#vent-warning{top:120px!important}`; document.head.append(st); }
+{ let drag = null;                                                // mouse: drag the background or turn the wheel to scroll sideways
+  circuit.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.target === renderer.domElement) drag = { x: e.clientX, s: circuit.scrollLeft }; });
+  addEventListener('pointermove', e => { if (drag) circuit.scrollLeft = drag.s - (e.clientX - drag.x); });
+  addEventListener('pointerup', () => { drag = null; });
+  circuit.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { circuit.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false }); }
 // ---------------------------------------------------------------- DOM overlay: touch areas, banners
 {
   const st = document.createElement('style');
@@ -802,7 +833,6 @@ const DTEXT = [
   ['BATTERY BREAKER', 745, 805, 'big'], ['BATTERY BREAKER', 1580, 1132, 'big'], ['BATTERY PIT', 748, 1392, 'big'], ['BATTERY PIT', 1610, 1257, 'big'],
   ['cooler', 1060, 500, ''], ['cooler', 1300, 500, ''], ['Expansion<br>tank', 1401, 640, ''], ['For blowing', 1350, 578, ''],
   ['Ion-Exchange filter', 1002, 1236, 'rot'], ['90', 1101, 1290, 'b'], ['86', 1185, 1065, 'b'],
-  ['t', 252, 920, 'b'], ['t', 277, 925, 'b'], ['t', 435, 1000, 'b'], ['t', 482, 1000, 'b'], ['t', 630, 1125, 'b'], ['t', 1708, 1160, 'b'], ['t', 1118, 615, 'b'],
   ['t = thermocouple<br>P = pressure sensor<br>CM = salinometer<br>M = motor', 1262, 1325, 'legend']
 ].map(([t, x, y, k]) => { const e = document.createElement('div'); e.className = 'dtext ' + k; e.innerHTML = t; labelsRoot.append(e); return { e, x, y }; });
 { const st = document.createElement('style'); st.textContent = `.dtext{position:absolute;transform:translate(-50%,-50%);pointer-events:none;white-space:nowrap;text-align:center;font:700 calc(var(--num,13px)*.95)/1.2 'Times New Roman',serif;color:#15191c;text-shadow:0 0 3px #fff,0 0 3px #fff}
@@ -843,13 +873,66 @@ function instruments(dt, spd) {
   set(INST_EL.L, String(Math.round(INST.lvl)), lvlLo ? 'alarm' : INST.lvl < 45 ? 'warn' : '');
   if (tankWater) { const depth = Math.max(1, 115 * INST.lvl / 100); tankWater.scale.z = depth / 72; tankWater.position.z = P(1401, 731 - depth / 2).z; }
 }
+// ---------------------------------------------------------------- live temperatures on the drawing's t thermocouples
+// Cooled water leaves the coolers at ~26 °C (35 °C if no cooler path is open); each panel / battery pit warms the water
+// a few degrees while its branch flows, and heats up toward its idle temperature when its water is shut off.
+const TSENS = [
+  ['Main motor panel', 252, 925, () => flowsAt('mca'), 8, 52], ['Grouper switch', 277, 872, () => flowsAt('mcb'), 7, 50],
+  ['Port panel', 435, 985, () => flowsAt('ecp'), 8, 52], ['Stbd panel', 482, 958, () => flowsAt('ecs'), 8, 52],
+  ['III battery pit', 630, 1125, () => coil3.flow, 6, 48], ['F/E battery pit', 1708, 1160, () => coilF.flow, 6, 48],
+  ['Cooled water (pump discharge)', 1118, 615, null, 0, 0]
+].map(([name, x, y, flow, rise, hot]) => { const e = document.createElement('div'); e.className = 'dtext tval'; e.innerHTML = 't<small>30 °C</small>'; labelsRoot.append(e); return { name, x, y, flow, rise, hot, e, T: 30 }; });
+{ const st = document.createElement('style'); st.textContent = `.dtext.tval{font:700 calc(var(--num,13px)*1.25)/1 'Times New Roman',serif;line-height:1}.dtext.tval small{display:block;margin-top:.15em;font:800 calc(var(--num,13px)*.72)/1.1 Arial,sans-serif;color:#1f7a70;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.4em;padding:.12em .3em}
+.dtext.tval.warn small{color:#a86a00;border-color:#e8a21a}.dtext.tval.alarm small{color:#fff;background:#d8322b;border-color:#d8322b;animation:instAlarm 1s ease-in-out infinite}`; document.head.append(st); }
+const supplyTemp = () => !S.running ? 30 : coolerPath() && pipes.some(p => p.flow) ? 26 : 35;
+function temps(dt) {
+  const anyFlow = pipes.some(p => p.flow), sup = supplyTemp();
+  for (const t of TSENS) {
+    const want = !S.running ? 30 : !t.flow ? (anyFlow ? sup : 30) : t.flow() ? sup + t.rise : t.hot;
+    t.T += (want - t.T) * Math.min(1, dt * .12);
+    const hot = t.T > 45, warm = t.T > 40, v = t.T.toFixed(0) + ' °C', sm = t.e.querySelector('small');
+    if (sm.textContent !== v) sm.textContent = v; t.e.classList.toggle('alarm', hot); t.e.classList.toggle('warn', warm && !hot);
+    instAlarm('T' + t.name, hot && !!t.flow, 'High temperature at ' + t.name + ' (' + t.T.toFixed(0) + ' °C) — open its cooling-water valves.');
+  }
+}
+// ---------------------------------------------------------------- info cards (as on screen 2), refreshed live while open
+{ const st = document.createElement('style'); st.textContent = `.vinfo-card{position:fixed;inset:0;background:#0b2a3d55;display:grid;place-items:center;z-index:50}
+.vinfo-card>div{width:min(480px,92vw);background:#fff;border-radius:16px;padding:20px 22px;font:15px/1.5 Arial,sans-serif;color:#173f57;box-shadow:0 20px 60px #0008}
+.vinfo-card h2{margin:0 0 6px;font-size:20px}.vinfo-card p{margin:6px 0;color:#3f5f72}.vinfo-card dl{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;margin:12px 0}.vinfo-card dt{color:#5a7586}.vinfo-card dd{margin:0;font-weight:700;text-align:right}
+.vinfo-card button{margin-top:8px;width:100%;height:46px;border-radius:10px;border:0;background:#1d4f6e;color:#fff;font:700 15px Arial}
+.gval.inst{pointer-events:auto;cursor:pointer}`; document.head.append(st); }
+function infoCard(title, text, rows) {
+  const w = document.createElement('div'); w.className = 'vinfo-card'; w.setAttribute('role', 'dialog'); w.setAttribute('aria-label', title);
+  const dl = () => '<dl>' + rows().map(([a, b]) => '<dt>' + a + '</dt><dd>' + b + '</dd>').join('') + '</dl>';
+  w.innerHTML = '<div><h2>' + title + '</h2><p>' + text + '</p>' + dl() + '<button type="button">Close</button></div>'; document.body.append(w);
+  const t = setInterval(() => { const d = w.querySelector('dl'); if (d) d.outerHTML = dl(); }, 400);
+  w.addEventListener('click', e => { if (e.target === w || e.target.tagName === 'BUTTON') { clearInterval(t); w.remove(); } });
+}
+const OC = k => S.open[k] ? 'OPEN' : 'CLOSED', tOf = name => TSENS.find(t => t.name === name).T.toFixed(0) + ' °C', flowing = n => flowsAt(n) ? 'Flowing' : 'No flow';
+const coolerCard = (n, a, b, key) => () => infoCard('Cooler ' + n, 'Sea-water cooled heat exchanger on the warm return line. Water coming back from the panels and battery pits gives up its heat here before the pumps send it out again. Valve 46 bypasses both coolers.', () => [
+  ['Inlet valve ' + a.slice(1), OC(a)], ['Outlet valve ' + b.slice(1), OC(b)], ['Bypass 46', OC('v46')], ['Water', flowing(key)],
+  ['Water in (warm)', (supplyTemp() + (flowsAt(key) ? 7 : 0)).toFixed(0) + ' °C'], ['Water out (cooled)', supplyTemp().toFixed(0) + ' °C']]);
+const breakerCard = (where, inV, outV, key, coil, pit) => () => infoCard(where + ' battery breaker', 'Water-cooled battery breaker: cooling water passes up two columns and through the exchanger between them (flexible hoses either side), then on to cool the ' + where + ' battery pit.', () => [
+  ['Inlet valve', OC(inV)], ['Outlet valve', OC(outV)], ['Breaker water', flowing(key)], ['Battery pit water', coil.flow ? 'Flowing' : 'No flow'], ['Battery pit temperature (t)', tOf(pit)]]);
+SPOTS.push(...[
+  ['ca', 1085, 482, coolerCard(1, 'v35', 'v40', 'ca')], ['cb', 1318, 482, coolerCard(2, 'v54', 'v50', 'cb')],
+  ['hx3', 745, 1066, breakerCard('III', 'b3i', 'b3o', 'hx3', coil3, 'III battery pit')], ['hxf', 1568, 1045, breakerCard('F/E', 'bfi', 'v60', 'hxf', coilF, 'F/E battery pit')],
+  ['ix', 968, 1048, () => infoCard('Ion-exchange filter', 'Takes dissolved salts out of the cooling water. Open 39, 34 and 91 to pass water from the pump discharge through the filter and the salinometer (CM) back to the suction; 98 bypasses the filter, 36 feeds the salinometer directly.', () => [
+    ['Valves 39 / 34 / 91', OC('v39') + ' / ' + OC('v34') + ' / ' + OC('v91')], ['Bypass 98', OC('v98')], ['Water through filter', flowing('ix')], ['Salinity (CM)', INST.sal.toFixed(1) + ' ppm']])]
+].map(([id, x, y, open]) => { const b = document.createElement('button'); b.className = 'vinfo'; b.setAttribute('aria-label', id + ' details'); b.innerHTML = '<span>i</span>'; b.addEventListener('click', open); labelsRoot.append(b); return { id, x, y, button: b }; }));
+// the live P / CM / L readings open their instrument's card
+INST_EL.P.e.addEventListener('click', () => infoCard('P · pressure sensor', 'Pump discharge pressure, measured on the riser above the pumps. It falls when drains are open or the pump slows.', () => [['Pressure now', INST.P.toFixed(2) + ' kg/cm²'], ['Pump running', S.on.p1 ? '40/15' : S.on.p2 ? '5/17' : 'none'], ['Drains open', ['v89', 'v51', 'v53', 'v116'].filter(k => S.open[k]).map(k => k.slice(1)).join(', ') || 'none'], ['Low-pressure alarm', 'below 2.2 kg/cm²']]));
+INST_EL.CM.e.addEventListener('click', () => infoCard('CM · salinometer', 'Measures the salt content of the battery cooling water. It creeps up while the water circulates; passing water through the ion-exchange filter brings it down.', () => [['Salinity now', INST.sal.toFixed(1) + ' ppm'], ['Water through filter', flowing('ix')], ['Normal', 'below 10 ppm'], ['Alarm', 'above 15 ppm']]));
+INST_EL.L.e.addEventListener('click', () => infoCard('Expansion tank', 'Keeps the closed cooling circuit full and takes up expansion. The level falls slowly in service and quickly through open drains; top up through valve 77.', () => [['Level now', Math.round(INST.lvl) + ' %'], ['Top-up 77', OC('v77')], ['Low-level alarm', 'below 30 %']]));
 // ---------------------------------------------------------------- layout and screen positions
 const v3 = new T.Vector3();
 function screenPoint(x, y, h = PIPE_Y) { v3.copy(P(x, y, h)).project(camera); return [(v3.x + 1) / 2 * host.clientWidth, (1 - v3.y) / 2 * host.clientHeight]; }
 let pxPerUnit = 1;
 function layout() {
+  { const ch = circuit.clientHeight, need = Math.max(circuit.clientWidth, Math.round((WX(1813) - WX(123)) / 1150 * ch));   // full height, as wide as the plan needs
+    if (host.style.width !== need + 'px') { host.style.width = need + 'px'; labelsRoot.style.width = need + 'px'; } }
   const w = host.clientWidth, h = host.clientHeight; if (!w || !h) return;
-  if (renderer.getPixelRatio() !== sharpRatio()) renderer.setPixelRatio(sharpRatio());
+  const pr = Math.min(sharpRatio(), 8192 / Math.max(1, w)); if (renderer.getPixelRatio() !== pr) renderer.setPixelRatio(pr);   // wide canvas: keep it within the GPU's size limit
   renderer.setSize(w, h);
   const PW = WX(1813) - WX(123), PH = 1150, cx = (WX(1813) + WX(123)) / 2, cz = 905 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
@@ -863,11 +946,12 @@ function layout() {
   for (const { p, e } of numEls) { const pump = p.type === 'pump', [sx, sy] = screenPoint(p.x + (pump ? 0 : 24), p.y + (pump ? -56 : -26), 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const { p, e } of runEls) { const [sx, sy] = screenPoint(p.x, p.y + 52, 80); Object.assign(e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const s of SPOTS) { const [sx, sy] = screenPoint(s.x, s.y, 80); Object.assign(s.button.style, { left: sx + 'px', top: sy + 'px' }); }
-  for (const g of gauges) { const [sx, sy] = screenPoint(g.at[0], g.at[1] + 24, 80); Object.assign(g.chip.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const g of gauges) { const [sx, sy] = screenPoint(g.at[0], g.at[1] + (g.up ? -30 : 24), 80); Object.assign(g.chip.style, { left: sx + 'px', top: sy + 'px', transform: g.up ? 'translate(-50%,-100%)' : '' }); }
   for (const k in INST_EL) { const d = INST_EL[k], [sx, sy] = screenPoint(d.x, d.y, 80); Object.assign(d.e.style, { left: sx + 'px', top: sy + 'px' }); }
+  for (const t of TSENS) { const [sx, sy] = screenPoint(t.x, t.y, 80); Object.assign(t.e.style, { left: sx + 'px', top: sy + 'px' }); }
   for (const d of DTEXT) { const [sx, sy] = screenPoint(d.x, d.y, 80); Object.assign(d.e.style, { left: sx + 'px', top: sy + 'px' }); }
 }
-new ResizeObserver(layout).observe(host);
+new ResizeObserver(layout).observe(circuit);
 window.visualViewport?.addEventListener('resize', layout);
 layout();
 
@@ -890,7 +974,7 @@ function frame(now) {
   for (const p of pipes) pipeUpdate(p, dt, p.flow ? 500 * Math.max(.3, Math.max(parts.get('p1').speed, parts.get('p2').speed)) : 0, AIR[p.air], px, now);
   for (const p of parts.values()) {
     if (p.wheel) p.wheel.rotation.y += (p.wheelTarget - p.wheel.rotation.y) * Math.min(1, dt * 6);
-    const target = !S.running ? LAMP_IDLE : isOn(p) ? (p.lamp.on || LAMP_ON) : LAMP_OFF;
+    const target = !S.running ? (p.lamp.idle || LAMP_IDLE) : isOn(p) ? (p.lamp.on || LAMP_ON) : LAMP_OFF;
     p.lamp.color.lerp(target, Math.min(1, dt * 8)); p.lamp.ring.material.color.copy(p.lamp.color); p.lamp.glow.material.color.copy(p.lamp.color);
   }
   for (const k in DIAMONDS) tint(DIAMONDS[k], flowsAt(DIAMOND_PIPE[k]));
@@ -901,7 +985,7 @@ function frame(now) {
     g.set(g.p); const t = g.p.toFixed(2); const vb = g.chip.querySelector('b'); if (vb.textContent !== t) vb.textContent = t; g.chip.classList.toggle('live', g.p > .05);
   }
   for (const pl of plumes) plumeUpdate(pl, dt, pl.key());
-  instruments(dt, spd);
+  instruments(dt, spd); temps(dt);
   const anyFlow = pipes.some(p => p.flow);
   for (const { b, sc } of batteries) b.update(dt, S.running ? (anyFlow ? .45 : .25) : 0, px * sc);
   renderer.render(scene, camera);
@@ -911,5 +995,6 @@ requestAnimationFrame(frame);
 // leaving the screen frees its graphics memory at once (phones keep the previous page alive otherwise)
 addEventListener('pagehide', () => { renderer.dispose(); renderer.forceContextLoss(); });
 addEventListener('pageshow', e => { if (e.persisted) location.reload(); });   // coming back to it: rebuild
+
 
 

@@ -6,6 +6,8 @@
 // Compartments left to right: M/R | E/R | III | C/R | F/E. Upper line = warm return to the coolers; lower line = cooled
 // supply from the pumps.
 import './offline-support.js';
+import {attachZoom} from './zoom-control.js';
+let Z = { z: 1, px: 0, py: 0 };   // zoom state (zoom-control.js)
 import * as T from 'three';
 import {battery3D, facing, openBatteryDetail} from './battery-detail.js';
 import {openBlowerDetail} from './blower-detail.js';
@@ -22,7 +24,7 @@ const P = (x, y, h = 0) => new T.Vector3(WX(x), h, y - 786);
 const PIPE_Y = 24;
 const FILL_SPEED = 520;                                  // plan units / s at which pumped water fills a pipe up to the next closed part
 const LAMP_IDLE = new T.Color('#8e9ca3'),   // light backdrop: idle rings in grey so they still show
-      LAMP_OFF = new T.Color('#d23b33'), LAMP_ON = new T.Color('#22b45a');
+      LAMP_OFF = new T.Color('#9aa7ae'), LAMP_ON = new T.Color('#22b45a');
 
 // ---------------------------------------------------------------- renderer, camera, light
 // phones and tablets (touch, coarse pointer) render at most 2× so the scene fits in their graphics memory
@@ -727,7 +729,7 @@ header #reset{background:#ffffff14!important;border:1px solid #ffffff38!importan
 #viewport{inset:0 auto 0 0!important;height:100%}#labels{inset:0 auto 0 0!important}
 #next-step,#vent-warning{position:fixed!important}#vent-warning{top:120px!important}`; document.head.append(st); }
 { let drag = null;                                                // mouse: drag the background or turn the wheel to scroll sideways
-  circuit.addEventListener('pointerdown', e => { if (e.pointerType === 'mouse' && e.target === renderer.domElement) drag = { x: e.clientX, s: circuit.scrollLeft }; });
+  /* drag-to-scroll at 100% is handled by the zoom control (baseDrag) */
   addEventListener('pointermove', e => { if (drag) circuit.scrollLeft = drag.s - (e.clientX - drag.x); });
   addEventListener('pointerup', () => { drag = null; });
   circuit.addEventListener('wheel', e => { if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) { circuit.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false }); }
@@ -864,8 +866,8 @@ const INST_START = { sal: 13.6, lvl: 72 }, INST = { P: 0, sal: INST_START.sal, l
 const instChip = (label, x, y, unit) => { const e = document.createElement('div'); e.className = 'gval inst'; e.innerHTML = '<span>' + label + '</span><small><b>0</b> ' + unit + '</small>'; labelsRoot.append(e); return { e, x, y }; };
 const INST_EL = { P: instChip('P', 1098, 692, 'kg/cm²'), CM: instChip('CM', 974, 712, 'ppm'), L: instChip('L', 1401, 676, '%') };   // the drawing's own P / CM / L letters carry the live reading
 { const st = document.createElement('style'); st.textContent = `.gval.inst small{color:#1f7a70}.gval.inst.warn{border-left-color:#e8a21a}.gval.inst.warn small{color:#a86a00}
-.gval.inst.alarm{border-left-color:#d8322b;animation:instAlarm 1s ease-in-out infinite}.gval.inst.alarm small{color:#c0392b}
-@keyframes instAlarm{50%{box-shadow:0 0 0 .3em #d8322b55}}`; document.head.append(st); }
+.gval.inst.alarm{border-left-color:#e8a21a;animation:instAlarm 1s ease-in-out infinite}.gval.inst.alarm small{color:#a86a00}
+@keyframes instAlarm{50%{box-shadow:0 0 0 .3em #e8a21a55}}`; document.head.append(st); }
 function instAlarm(k, on, msg) { if (on && !INST.al[k]) warn('⚠ ' + msg); INST.al[k] = on; }
 function instruments(dt, spd) {
   const anyFlow = pipes.some(p => p.flow), drains = ['v89', 'v51', 'v53', 'v116'].filter(k => S.open[k]).length, pumping = (S.on.p1 || S.on.p2) && spd > .05;
@@ -894,7 +896,7 @@ const TSENS = [
   ['Cooled water (pump discharge)', 1118, 615, null, 0, 0]
 ].map(([name, x, y, flow, rise, hot]) => { const e = document.createElement('div'); e.className = 'dtext tval'; e.innerHTML = 't<small>30 °C</small>'; labelsRoot.append(e); return { name, x, y, flow, rise, hot, e, T: 30 }; });
 { const st = document.createElement('style'); st.textContent = `.dtext.tval{font:700 calc(var(--num,13px)*1.2)/1 'Times New Roman',serif;line-height:1;background:none;border:0;box-shadow:none;padding:0;color:#15191c}.dtext.tval small{display:block;margin-top:.15em;font:800 calc(var(--num,13px)*.85)/1.1 Arial,sans-serif;color:#1f7a70;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.4em;padding:.12em .3em}
-.dtext.tval.warn small{color:#a86a00;border-color:#e8a21a}.dtext.tval.alarm small{color:#fff;background:#d8322b;border-color:#d8322b;animation:instAlarm 1s ease-in-out infinite}`; document.head.append(st); }
+.dtext.tval.warn small{color:#a86a00;border-color:#e8a21a}.dtext.tval.alarm small{color:#fff;background:#e08a12;border-color:#e08a12;animation:instAlarm 1s ease-in-out infinite}`; document.head.append(st); }
 const supplyTemp = () => !S.running ? 30 : coolerPath() && pipes.some(p => p.flow) ? 26 : 35;
 function temps(dt) {
   const anyFlow = pipes.some(p => p.flow), sup = supplyTemp();
@@ -947,7 +949,8 @@ function layout() {
   renderer.setSize(w, h);
   const PW = WX(1813) - WX(123), PH = 1150, cx = (WX(1813) + WX(123)) / 2, cz = 905 - 786, aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
-  Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix();
+  const hw0 = hw, hh0 = hh; hw /= Z.z; hh /= Z.z; Z.px = Math.max(-hw0 * (1 - 1 / Z.z), Math.min(hw0 * (1 - 1 / Z.z), Z.px)); Z.py = Math.max(-hh0 * (1 - 1 / Z.z), Math.min(hh0 * (1 - 1 / Z.z), Z.py));   // zoom / pan
+  Object.assign(camera, { left: cx + Z.px - hw, right: cx + Z.px + hw, top: -(cz + Z.py) + hh, bottom: -(cz + Z.py) - hh }); camera.updateProjectionMatrix();
   pxPerUnit = h / (2 * hh);
   for (const p of parts.values()) {
     const [sx, sy] = screenPoint(p.x, p.y), s = Math.max(44, p.size * pxPerUnit);
@@ -970,6 +973,7 @@ function layout() {
 new ResizeObserver(layout).observe(circuit);
 window.visualViewport?.addEventListener('resize', layout);
 layout();
+Z = attachZoom(renderer.domElement, { worldPerPx: () => 1 / pxPerUnit, apply: layout, baseDrag: dx => { circuit.scrollLeft -= dx; } });   // client: zoom + pan
 
 // ---------------------------------------------------------------- loop
 const tint = (d, flowing) => { d.col.lerp(!S.running ? LAMP_IDLE : flowing ? LAMP_ON : LAMP_OFF, .12); d.face.color.copy(d.col); d.side.color.copy(d.col).multiplyScalar(.7); };

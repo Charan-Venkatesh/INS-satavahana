@@ -4,6 +4,8 @@
 // pipelines and turned so the top view shows them exactly as in the supplied blower picture.
 // Plan coordinates are the supplied drawing's (2000 × 1572, x right, y down, skew straightened); world = (x − 1000, h, y − 786).
 import './offline-support.js';
+import {attachZoom} from './zoom-control.js';
+let Z = { z: 1, px: 0, py: 0 };   // zoom state (zoom-control.js)
 import * as T from 'three';
 import {battery3D, facing, openBatteryDetail} from './battery-detail.js';
 import {openBlowerDetail} from './blower-detail.js';
@@ -15,7 +17,7 @@ const P = (x, y, h = 0) => new T.Vector3(x - 1000, h, y - 786);
 const PIPE_Y = 24, SIM_SPEED = 60;                       // 1 s on screen = 1 simulated minute for the pit hydrogen
 const FILL_SPEED = 520;                                  // plan units / s at which released air fills a pipe up to the next closed part
 const LAMP_IDLE = new T.Color('#8e9ca3'),   // light backdrop: idle rings in grey so they still show
-      LAMP_OFF = new T.Color('#d23b33'), LAMP_ON = new T.Color('#22b45a');
+      LAMP_OFF = new T.Color('#9aa7ae'), LAMP_ON = new T.Color('#22b45a');
 
 // ---------------------------------------------------------------- renderer, camera, light
 // phones and tablets (touch, coarse pointer) render at most 2× so the scene fits in their graphics memory
@@ -92,7 +94,7 @@ void main(){vec2 q=(vP-uCenter)/uHalf;float t=uTime,r=length(q*vec2(.85,1.));
     fit() { const w = camera.right - camera.left, h = camera.top - camera.bottom, cx = (camera.left + camera.right) / 2, cz = -(camera.top + camera.bottom) / 2;
       m.scale.set(w * 1.02, h * 1.02, 1); m.position.x = cx; m.position.z = cz; u.uCenter.value.set(cx, cz); u.uHalf.value.set(w / 2, h / 2); },
     update(dt, run, ok, alarm) { const k = Math.min(1, dt * 2.5), ease = (o, t) => o.value += (t - o.value) * k; u.uTime.value += dt;
-      ease(u.uFlow, run ? 1 : 0); ease(u.uOk, ok ? 1 : 0); ease(u.uVent, alarm ? 1 : 0); u.uMouse.value.z += (hover - u.uMouse.value.z) * k; }
+      ease(u.uFlow, run ? 1 : 0); ease(u.uOk, ok ? 1 : 0); ease(u.uVent, 0);   /* client: no red pulse */ u.uMouse.value.z += (hover - u.uMouse.value.z) * k; }
   };
 })();
 {
@@ -1176,7 +1178,8 @@ function layout() {
   renderer.setSize(w, h);
   const [PW, PH, cx, cz] = extOn ? [2340, 1600, 795 - 1000, 925 - 786] : [1940, 1340, 990 - 1000, 895 - 786], aspect = w / h;
   let hw, hh; if (aspect > PW / PH) { hh = PH / 2; hw = hh * aspect; } else { hw = PW / 2; hh = hw / aspect; }
-  Object.assign(camera, { left: cx - hw, right: cx + hw, top: -cz + hh, bottom: -cz - hh }); camera.updateProjectionMatrix(); backdrop.fit();
+  const hw0 = hw, hh0 = hh; hw /= Z.z; hh /= Z.z; Z.px = Math.max(-hw0 * (1 - 1 / Z.z), Math.min(hw0 * (1 - 1 / Z.z), Z.px)); Z.py = Math.max(-hh0 * (1 - 1 / Z.z), Math.min(hh0 * (1 - 1 / Z.z), Z.py));   // zoom / pan
+  Object.assign(camera, { left: cx + Z.px - hw, right: cx + Z.px + hw, top: -(cz + Z.py) + hh, bottom: -(cz + Z.py) - hh }); camera.updateProjectionMatrix(); backdrop.fit();
   pxPerUnit = h / (2 * hh);
   for (const p of parts.values()) {
     const [sx, sy] = screenPoint(p.x, p.y), s = Math.max(44, p.size * pxPerUnit);
@@ -1202,6 +1205,7 @@ setExt(false);                                            // start in the normal
 new ResizeObserver(layout).observe(host);
 window.visualViewport?.addEventListener('resize', layout);
 layout();
+Z = attachZoom(renderer.domElement, { worldPerPx: () => 1 / pxPerUnit, apply: layout });   // client: zoom + pan
 
 // ---------------------------------------------------------------- loop
 const tmpC = new T.Color();

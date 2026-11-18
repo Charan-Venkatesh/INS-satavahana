@@ -1,4 +1,6 @@
 import './offline-support.js';
+import {attachZoom} from './zoom-control.js';
+let Z = { z: 1, px: 0, py: 0 }, zoomWPP = 1;   // zoom state (zoom-control.js)
 import {createBatteryBubbles} from './battery-bubbles.js';
 import {branchFlow,density} from './airflow-model.js';
 import {openBatteryDetail,photoLid,createVapour,battery3D,facing} from './battery-detail.js';
@@ -166,7 +168,7 @@ const WHEEL_SHUT=Math.PI/4,WHEEL_OPEN=-4*Math.PI,WHEEL_SPEED=3*Math.PI;   // shu
 const turnWheel=side=>{const w=bodyGroups[side+'-shutoff']?.userData.shutoffWheel;if(w)w.userData.target=branches[side].open?WHEEL_OPEN:WHEEL_SHUT};
 // Auto reducer status colour: its square V cap is green while the auto reducer is ON (reducing) and red when it is
 // OFF (bypassed); double-click to switch. The colour fades between states and pulses while air is passing through.
-const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#d23b33'),LAMP_IDLE=new T.Color('#8e9ca3');   // light backdrop: idle in grey so it still shows
+const autoLamps={},LAMP_ON=new T.Color('#22b45a'),LAMP_OFF=new T.Color('#9aa7ae'),LAMP_IDLE=new T.Color('#8e9ca3');   // light backdrop: idle in grey so it still shows
 
 function autoReducerLamps(){model3d.traverse(n=>{const m=/^(port|stbd)[ _](?:square[ _]symbol[ _]cap[ _](v|x)|diamond[ _]filter[ _]top)/i.exec(n.name);if(!m||!n.isMesh)return;
  n.material=n.material.clone();n.material.color.copy(LAMP_OFF);if(n.material.emissive)n.material.emissive.copy(LAMP_OFF);(!m[2]?filterLamps:m[2].toLowerCase()==='v'?autoLamps:handLamps)[m[1].toLowerCase()]={mesh:n,col:LAMP_IDLE.clone()}})}
@@ -206,8 +208,8 @@ document.querySelector('#reference').onclick=()=>document.querySelector('#refere
 document.querySelector('#fullscreen').onclick=async()=>{try{if(document.fullscreenElement)await document.exitFullscreen();else await document.documentElement.requestFullscreen()}catch{document.querySelector('#fullscreen').textContent='Use browser full screen'}};document.addEventListener('fullscreenchange',()=>document.querySelector('#fullscreen').textContent=document.fullscreenElement?'⛶ Exit full screen':'⛶ Full screen');
 // No OrbitControls, drag handlers, zoom or camera animation. Resize only fits the same plan.
 function screenPoint(x,z){const v=pos(x,z,45).project(camera);const r=host.getBoundingClientRect(),parent=circuit.getBoundingClientRect();return {x:r.left-parent.left+(v.x+1)*r.width/2,y:r.top-parent.top+(1-v.y)*r.height/2}}
-function layout(){if(renderer.getPixelRatio&&renderer.getPixelRatio()!==sharpRatio())renderer.setPixelRatio(sharpRatio());const w=host.clientWidth,h=host.clientHeight,aspect=w/h;const planW=fitBox?fitBox.w:1900,planH=fitBox?fitBox.h:1490;const height=Math.max(planH,planW/aspect);if(fitBox&&viewMode!=='front'){camera.position.set(fitBox.cx,3000,fitBox.cz);camera.lookAt(fitBox.cx,0,fitBox.cz)}camera.left=-height*aspect/2;camera.right=height*aspect/2;camera.top=height/2;camera.bottom=-height/2;camera.updateProjectionMatrix();camera.updateMatrixWorld();renderer.setSize(w,h);for(const l of labelNodes){const p=screenPoint(l.x,l.z);l.el.style.left=p.x+'px';l.el.style.top=p.y+'px'}circuit.style.setProperty('--k',String(w/(height*aspect)));paintBackdrop();for(const l of hotspots){const p=screenPoint(l.x,l.z),k=w/(height*aspect),size=l.size*k;Object.assign(l.el.style,{left:p.x+'px',top:p.y+'px',width:size+'px',height:(l.h||l.size)*k+'px'})}}
-if('ResizeObserver' in window)new ResizeObserver(layout).observe(host);else window.addEventListener('resize',layout);host.addEventListener('wheel',e=>e.preventDefault(),{passive:false});host.addEventListener('contextmenu',e=>e.preventDefault());
+function layout(){if(renderer.getPixelRatio&&renderer.getPixelRatio()!==sharpRatio())renderer.setPixelRatio(sharpRatio());const w=host.clientWidth,h=host.clientHeight,aspect=w/h;const planW=fitBox?fitBox.w:1900,planH=fitBox?fitBox.h:1490;const height0=Math.max(planH,planW/aspect),zz=viewMode!=='front'?Z.z:1,height=height0/zz;Z.px=Math.max(-height0*aspect/2*(1-1/zz),Math.min(height0*aspect/2*(1-1/zz),Z.px));Z.py=Math.max(-height0/2*(1-1/zz),Math.min(height0/2*(1-1/zz),Z.py));zoomWPP=height/h;/* zoom / pan */if(fitBox&&viewMode!=='front'){camera.position.set(fitBox.cx+Z.px,3000,fitBox.cz+Z.py);camera.lookAt(fitBox.cx+Z.px,0,fitBox.cz+Z.py)}camera.left=-height*aspect/2;camera.right=height*aspect/2;camera.top=height/2;camera.bottom=-height/2;camera.updateProjectionMatrix();camera.updateMatrixWorld();renderer.setSize(w,h);for(const l of labelNodes){const p=screenPoint(l.x,l.z);l.el.style.left=p.x+'px';l.el.style.top=p.y+'px'}circuit.style.setProperty('--k',String(w/(height*aspect)));paintBackdrop();for(const l of hotspots){const p=screenPoint(l.x,l.z),k=w/(height*aspect),size=l.size*k;Object.assign(l.el.style,{left:p.x+'px',top:p.y+'px',width:size+'px',height:(l.h||l.size)*k+'px'})}}
+if('ResizeObserver' in window)new ResizeObserver(layout).observe(host);else window.addEventListener('resize',layout);Z=attachZoom(renderer.domElement,{worldPerPx:()=>zoomWPP,apply:layout});/* client: zoom + pan */host.addEventListener('wheel',e=>e.preventDefault(),{passive:false});host.addEventListener('contextmenu',e=>e.preventDefault());
 // Load the actual assembled Blender scene. The earlier layout geometry is hidden.
 let actualModelReady=false,nativeAir=null,nativeAirFrames=[],nativeAirPhase=0;const nativeReleaseStreaks=[];
 const loading=document.createElement('div');loading.id='assembly-loading';loading.textContent='Loading assembled 3D parts…';circuit.append(loading);
@@ -661,7 +663,7 @@ function clientAdditions(){
 .hr-read .hs{font-size:.72em;min-height:1.3em;color:#5d7281;font-weight:600}
 .hr-read button{margin-top:.45em;width:100%;height:2.5em;border-radius:.6em;border:1px solid #a9c4d6;background:#fff;font:700 .95em/1 Arial;color:#1d4d6b}
 .hr-read.ok{border-color:#22b45a;box-shadow:0 0 0 .25em #22b45a30}.hr-read.ok .hv,.hr-read.ok .hs{color:#159447}.hr-read.ok .fill{background:#22b45a}
-.hr-read.off{border-color:#e2574c}.hr-read.off .hv,.hr-read.off .hs{color:#c0392b}.hr-read.off .fill{background:#e2574c}
+.hr-read.off{border-color:#e8a21a}.hr-read.off .hv,.hr-read.off .hs{color:#a86a00}.hr-read.off .fill{background:#e8a21a}
 @keyframes fadeUp{from{opacity:0;translate:0 .8em}to{opacity:1;translate:0 0}}
 @keyframes pop{0%{scale:1}35%{scale:1.14}100%{scale:1}}
 @keyframes okGlow{0%,100%{box-shadow:0 0 0 .2em #22b45a30,0 .4em 1.2em #12405e1f}50%{box-shadow:0 0 0 .45em #22b45a22,0 0 1.4em #22b45a55}}
@@ -713,7 +715,7 @@ header #start[aria-pressed="true"]{background:linear-gradient(180deg,#f5b544,#d9
 #circuit .drawing-label small{color:#1f7a70!important;font-weight:700!important;margin-top:.15em!important;font-size:.82em}
 #circuit .drawing-label.muted{background:#1d4f6e;color:#fff!important;border:0;border-radius:999px;padding:.32em 1em;letter-spacing:.24em;font-weight:700;box-shadow:0 .3em .9em #12405e33}
 .hr-read,.pit-meter{border-top-width:.32em!important;border-top-style:solid!important}
-.hr-read{border-top-color:#8aa0ad!important}.hr-read.ok{border-top-color:#22b45a!important}.hr-read.off{border-top-color:#e2574c!important}
+.hr-read{border-top-color:#8aa0ad!important}.hr-read.ok{border-top-color:#22b45a!important}.hr-read.off{border-top-color:#e8a21a!important}
 .pit-meter{border-top-color:#1f7fbf!important}.pit-meter.venting{border-top-color:#e2574c!important}
 .legend-card{position:absolute;transform:translate(-50%,-50%);z-index:5;font:600 clamp(10px,.66vw,16px)/1.3 Arial,sans-serif;color:#173f57;background:#ffffffe6;border:1px solid #cfdde7;border-radius:.9em;padding:.7em .9em;box-shadow:0 .4em 1.2em #12405e1f;pointer-events:none;animation:fadeUp .7s .4s cubic-bezier(.2,.8,.2,1) both}
 .legend-card h4{margin:0 0 .45em;font-size:.82em;letter-spacing:.16em;color:#4a7088}
